@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LinkedIn Recruiter Intelligence</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <span class="logo-icon">🎯</span>
+            <h1>Recruiter Intel</h1>
+        </div>
+        <div class="stats">
+            <span id="profile-count">0</span> profiles
+        </div>
+    </header>
+
+    <!-- Tab navigation -->
+    <nav class="tabs">
+        <button class="tab-btn active" data-tab="profiles">📋 Saved</button>
+        <button class="tab-btn" data-tab="bulk">📥 Bulk Mode</button>
+        <button class="tab-btn" data-tab="export">📊 Export</button>
+    </nav>
+
+    <!-- TAB: SAVED PROFILES -->
+    <div class="tab-pane active" id="tab-profiles">
+        <div class="search-bar">
+            <input type="text" id="search-input" placeholder="🔍 Search by name, company, location, job..." />
+        </div>
+        <main id="profile-list">
+            <div class="empty-state" id="empty-state">
+                <div class="empty-icon">📭</div>
+                <h2>No profiles yet</h2>
+                <p>Visit any LinkedIn profile<br>and click <strong>📥 Save Profile</strong>.<br><br>Or use <strong>📥 Bulk Mode</strong> to scrape many at once!</p>
+            </div>
+        </main>
+    </div>
+
+    <!-- TAB: BULK MODE -->
+    <div class="tab-pane" id="tab-bulk">
+        <div class="bulk-section">
+            <h3>📥 Bulk Recruiter Scraper</h3>
+            <p class="hint">Paste LinkedIn recruiter URLs (one per line) OR upload a CSV file. Extension will visit each profile, scrape data + their hiring jobs, and enrich with full job/company details.</p>
+
+            <div class="input-group">
+                <label>Paste URLs (one per line):</label>
+                <textarea id="bulk-urls" placeholder="https://www.linkedin.com/in/username1
+https://www.linkedin.com/in/username2
+https://www.linkedin.com/in/username3"></textarea>
+            </div>
+
+            <div class="input-group">
+                <label>Or upload CSV file:</label>
+                <input type="file" id="bulk-file" accept=".csv,.txt" />
+                <p class="hint-small">CSV should have URLs in any column. Auto-detected.</p>
+            </div>
+
+            <div class="settings-row">
+                <label>
+                    <input type="checkbox" id="opt-enrich-jobs" />
+                    Enrich each job page (slower — only if you need full job description / company size)
+                </label>
+            </div>
+
+            <div class="settings-row">
+                <label>Delay between profiles (sec):</label>
+                <input type="number" id="opt-delay" value="6" min="2" max="60" style="width:60px" />
+                <small>Empty profiles auto-skip with 2s delay</small>
+            </div>
+
+            <div class="actions">
+                <button id="btn-bulk-start" class="btn btn-primary">🚀 Start Bulk Scrape</button>
+                <button id="btn-bulk-stop" class="btn btn-danger" style="display:none">⏹ Stop</button>
+            </div>
+
+            <div id="bulk-progress" style="display:none">
+                <div class="progress-bar-wrap">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <div class="progress-text">
+                    <span id="progress-current">0</span> / <span id="progress-total">0</span> profiles
+                    · <span id="progress-status">Ready</span>
+                </div>
+                <div id="progress-log" class="progress-log"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: EXPORT -->
+    <div class="tab-pane" id="tab-export">
+        <div class="bulk-section">
+            <h3>📊 Export Data</h3>
+            <p class="hint">Choose format:</p>
+
+            <div class="export-options">
+                <button id="btn-export-jobs-csv" class="btn btn-primary export-card">
+                    <div class="export-icon">💼</div>
+                    <div class="export-title">Jobs CSV</div>
+                    <div class="export-desc">One row per job<br>(your expected format)</div>
+                </button>
+                <button id="btn-export-profiles-csv" class="btn btn-primary export-card">
+                    <div class="export-icon">👥</div>
+                    <div class="export-title">Profiles CSV</div>
+                    <div class="export-desc">One row per recruiter</div>
+                </button>
+                <button id="btn-export-json" class="btn btn-primary export-card">
+                    <div class="export-icon">📦</div>
+                    <div class="export-title">Full JSON</div>
+                    <div class="export-desc">Complete raw data</div>
+                </button>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <button id="btn-clear" class="btn btn-danger" style="width:100%">🗑️ Clear All Saved Data</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>LinkedIn Recruiter Intelligence v0.2.1 · Fast Bulk</p>
+    </footer>
+
+    <script src="popup.js"></script>
+</body>
+</html>
