@@ -1,10 +1,11 @@
 /**
- * POPUP UI LOGIC v0.2.0
+ * POPUP UI LOGIC v0.4.0
  * ─────────────────────
- * Tabs: Saved Profiles | Bulk Mode | Export
+ * Tabs: Saved Profiles | n8n (pull + scrape) | Export
  */
 
 let allProfiles = [];
+let pendingUrls = [];   // populated by Pull from n8n
 
 // ═══════════════════════════════════════════════════════════════════════
 // INIT
@@ -193,11 +194,9 @@ function setupEventListeners() {
         }
     });
 
-    // ── BULK MODE ──
+    // ── SCRAPE QUEUE (lives inside n8n tab) ──
     document.getElementById('btn-bulk-start').addEventListener('click', startBulkScrape);
     document.getElementById('btn-bulk-stop').addEventListener('click', stopBulkScrape);
-
-    document.getElementById('bulk-file').addEventListener('change', handleFileUpload);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -205,20 +204,14 @@ function setupEventListeners() {
 // ═══════════════════════════════════════════════════════════════════════
 
 async function startBulkScrape() {
-    const text = document.getElementById('bulk-urls').value.trim();
-    if (!text) {
-        alert('Please paste at least one LinkedIn URL!');
+    if (pendingUrls.length === 0) {
+        alert('No URLs in queue. Click "📥 Pull URLs" first to fetch from n8n.');
         return;
     }
 
-    const urls = parseUrls(text);
-    if (urls.length === 0) {
-        alert('No valid LinkedIn profile URLs found! Make sure they look like https://www.linkedin.com/in/username');
-        return;
-    }
-
+    const urls = pendingUrls.slice();
     if (urls.length > 200) {
-        if (!confirm(`Found ${urls.length} URLs. This will take ~${Math.round(urls.length * 0.5)} hours. Continue?`)) return;
+        if (!confirm(`${urls.length} URLs queued. This will take ~${Math.round(urls.length * 0.5)} hours. Continue?`)) return;
     }
 
     const delay = parseInt(document.getElementById('opt-delay').value) || 15;
@@ -308,39 +301,14 @@ function appendLogLine(entry, container) {
     container.appendChild(line);
 }
 
-function parseUrls(text) {
-    const lines = text.split(/[\r\n,;]+/).map(l => l.trim()).filter(Boolean);
-    const urls = [];
-    const seen = new Set();
-    for (const line of lines) {
-        // Extract URL from each line (handles CSV cells too)
-        const match = line.match(/https?:\/\/[\w.]*linkedin\.com\/in\/[^\s,"'<>]+/i);
-        if (match) {
-            const url = match[0].replace(/\/$/, '');
-            if (!seen.has(url)) {
-                seen.add(url);
-                urls.push(url);
-            }
-        } else if (line.match(/^[\w-]+$/)) {
-            // Just a username
-            const url = `https://www.linkedin.com/in/${line}`;
-            if (!seen.has(url)) {
-                seen.add(url);
-                urls.push(url);
-            }
-        }
+function updateQueueInfo() {
+    const el = document.getElementById('queue-info');
+    if (!el) return;
+    if (pendingUrls.length === 0) {
+        el.textContent = 'No URLs pulled yet.';
+    } else {
+        el.textContent = `📋 ${pendingUrls.length} URLs ready to scrape.`;
     }
-    return urls;
-}
-
-function handleFileUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-        document.getElementById('bulk-urls').value = evt.target.result;
-    };
-    reader.readAsText(file);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -555,13 +523,13 @@ async function pullFromN8n() {
 
         if (urls.length === 0) {
             n8nLog('⚠️ No LinkedIn URLs found in response.', 'error');
+            updateQueueInfo();
             return;
         }
 
-        // Switch to Bulk tab and populate
-        document.querySelector('[data-tab="bulk"]').click();
-        document.getElementById('bulk-urls').value = urls.join('\n');
-        n8nLog(`✅ Pulled ${urls.length} URLs → Bulk tab.`, 'success');
+        pendingUrls = urls;
+        updateQueueInfo();
+        n8nLog(`✅ Pulled ${urls.length} URLs. Click 🚀 Start Scrape.`, 'success');
     } catch (err) {
         n8nLog(`❌ ${err.message}`, 'error');
     }

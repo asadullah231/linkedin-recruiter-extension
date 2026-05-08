@@ -8,7 +8,7 @@
  *  - Progress tracking + notifications to popup
  */
 
-console.log('🟢 LRI Background v0.3.0 loaded');
+console.log('🟢 LRI Background v0.4.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
