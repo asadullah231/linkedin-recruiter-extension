@@ -37,6 +37,7 @@
             </div>
             <div class="ls-detail" id="ls-detail">Working...</div>
         </div>
+        <button id="btn-emergency-stop" class="btn btn-danger" style="margin-left:10px; padding:6px 12px; font-size:12px">⏹ STOP</button>
     </div>
 
     <!-- Tab navigation -->
@@ -123,6 +124,13 @@
                     Extension auto-checks n8n every <strong>30 seconds</strong> for new URLs and scrapes them — even when popup is closed.
                     Just keep Chrome open. <em>Zero clicks needed after setup.</em>
                 </p>
+                <label class="mode-label" style="margin-top:8px; padding-top:8px; border-top:1px dashed #e5e7eb">
+                    <input type="checkbox" id="n8n-stop-after-batch" />
+                    <span style="font-size:12px">⏹ <strong>Stop after current batch finishes</strong></span>
+                </label>
+                <p class="mode-desc">
+                    When ON, auto-pull turns OFF automatically once the current scrape batch completes. Prevents endless looping.
+                </p>
             </div>
 
             <div class="mode-card">
@@ -198,7 +206,7 @@
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.7.0 · 🤖 Live Status</p>
+        <p>LinkedIn Recruiter Intelligence v0.8.0 · ⏹ Stop Controls</p>
     </footer>
 
     <script src="popup.js"></script>

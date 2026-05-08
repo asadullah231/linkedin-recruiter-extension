@@ -348,6 +348,15 @@ async function runBulkQueue() {
         if (n8nSettings.autoSend && n8nSettings.callbackUrl) {
             await sendBulkResultsToN8n(n8nSettings, savedCount, skippedCount);
         }
+
+        // ── stop-after-batch: disable auto-pull when batch completes ──
+        if (n8nSettings.autoPull && n8nSettings.stopAfterBatch) {
+            chrome.alarms.clear('auto-pull');
+            n8nSettings.autoPull = false;
+            await chrome.storage.local.set({ n8nSettings });
+            bulkLog('⏹ Stop-after-batch triggered — auto-pull DISABLED.', 'info');
+            updateBadge();
+        }
     } catch (err) {
         bulkLog(`⚠️ n8n callback error: ${err.message}`, 'error');
     }

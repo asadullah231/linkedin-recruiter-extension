@@ -479,6 +479,8 @@ async function loadN8nSettings() {
     document.getElementById('n8n-auto-send').checked = !!n8nSettings.autoSend;
     const autoPullEl = document.getElementById('n8n-auto-pull');
     if (autoPullEl) autoPullEl.checked = !!n8nSettings.autoPull;
+    const stopAfterEl = document.getElementById('n8n-stop-after-batch');
+    if (stopAfterEl) stopAfterEl.checked = !!n8nSettings.stopAfterBatch;
 }
 
 function setupN8nListeners() {
@@ -486,16 +488,41 @@ function setupN8nListeners() {
     document.getElementById('btn-n8n-pull').addEventListener('click', pullFromN8n);
     document.getElementById('btn-n8n-send').addEventListener('click', sendToN8n);
     document.getElementById('btn-n8n-test').addEventListener('click', testN8nConnection);
+
+    const emergencyBtn = document.getElementById('btn-emergency-stop');
+    if (emergencyBtn) {
+        emergencyBtn.addEventListener('click', emergencyStop);
+    }
+}
+
+async function emergencyStop() {
+    // 1. Stop the bulk scrape
+    await chrome.runtime.sendMessage({ action: 'stopBulk' }).catch(() => {});
+
+    // 2. Disable auto-pull
+    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+    n8nSettings.autoPull = false;
+    await chrome.storage.local.set({ n8nSettings });
+    await chrome.runtime.sendMessage({ action: 'setAutoPull', enabled: false }).catch(() => {});
+
+    // 3. Update UI
+    const autoPullEl = document.getElementById('n8n-auto-pull');
+    if (autoPullEl) autoPullEl.checked = false;
+
+    n8nLog('🛑 EMERGENCY STOP — scrape halted, auto-pull disabled.', 'error');
+    refreshStatusIndicator();
 }
 
 async function saveN8nSettings() {
     const autoPullEl = document.getElementById('n8n-auto-pull');
+    const stopAfterEl = document.getElementById('n8n-stop-after-batch');
     const settings = {
         pullUrl: document.getElementById('n8n-pull-url').value.trim(),
         callbackUrl: document.getElementById('n8n-callback-url').value.trim(),
         apiKey: document.getElementById('n8n-api-key').value.trim(),
         autoSend: document.getElementById('n8n-auto-send').checked,
-        autoPull: autoPullEl ? autoPullEl.checked : false
+        autoPull: autoPullEl ? autoPullEl.checked : false,
+        stopAfterBatch: stopAfterEl ? stopAfterEl.checked : false
     };
     await chrome.storage.local.set({ n8nSettings: settings });
 
@@ -505,7 +532,7 @@ async function saveN8nSettings() {
         enabled: settings.autoPull
     }).catch(() => {});
 
-    n8nLog(`💾 Settings saved.${settings.autoPull ? ' 🤖 Auto-pull ENABLED.' : ''}`, 'success');
+    n8nLog(`💾 Settings saved.${settings.autoPull ? ' 🤖 Auto-pull ENABLED.' : ''}${settings.stopAfterBatch ? ' ⏹ Stop-after-batch ON.' : ''}`, 'success');
 }
 
 function getN8nSettings() {
