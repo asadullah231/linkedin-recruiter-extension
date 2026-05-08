@@ -167,25 +167,6 @@ function setupEventListeners() {
         renderProfiles(filtered);
     });
 
-    // ── EXPORT BUTTONS ──
-    document.getElementById('btn-export-jobs-csv').addEventListener('click', () => {
-        if (allProfiles.length === 0) return alert('No profiles to export!');
-        const csv = '﻿' + buildJobsCsv(allProfiles);
-        downloadFile(csv, `linkedin-jobs-${Date.now()}.csv`, 'text/csv;charset=utf-8');
-    });
-
-    document.getElementById('btn-export-profiles-csv').addEventListener('click', () => {
-        if (allProfiles.length === 0) return alert('No profiles to export!');
-        const csv = '﻿' + buildProfilesCsv(allProfiles);
-        downloadFile(csv, `linkedin-profiles-${Date.now()}.csv`, 'text/csv;charset=utf-8');
-    });
-
-    document.getElementById('btn-export-json').addEventListener('click', () => {
-        if (allProfiles.length === 0) return alert('No profiles to export!');
-        const json = JSON.stringify(allProfiles, null, 2);
-        downloadFile(json, `linkedin-data-${Date.now()}.json`, 'application/json');
-    });
-
     document.getElementById('btn-clear').addEventListener('click', async () => {
         if (allProfiles.length === 0) return;
         if (confirm(`Delete all ${allProfiles.length} saved profiles? This cannot be undone.`)) {
@@ -440,20 +421,6 @@ function csvEscape(v) {
     return `"${s}"`;
 }
 
-function downloadFile(content, filename, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-
-    if (chrome.downloads && chrome.downloads.download) {
-        chrome.downloads.download({ url, filename, saveAs: true }, () => {
-            if (chrome.runtime.lastError) fallbackDownload(url, filename);
-            else setTimeout(() => URL.revokeObjectURL(url), 60000);
-        });
-    } else {
-        fallbackDownload(url, filename);
-    }
-}
-
 // ═══════════════════════════════════════════════════════════════════════
 // n8n INTEGRATION
 // ═══════════════════════════════════════════════════════════════════════
@@ -667,15 +634,3 @@ function n8nLog(message, type = 'info') {
     container.scrollTop = container.scrollHeight;
 }
 
-function fallbackDownload(url, filename) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }, 1000);
-}

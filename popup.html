@@ -20,7 +20,6 @@
     <nav class="tabs">
         <button class="tab-btn active" data-tab="profiles">📋 Saved</button>
         <button class="tab-btn" data-tab="n8n">🔗 n8n</button>
-        <button class="tab-btn" data-tab="export">📊 Export</button>
     </nav>
 
     <!-- TAB: SAVED PROFILES -->
@@ -118,41 +117,15 @@
             <div id="n8n-status" class="progress-log" style="margin-top:12px; min-height:40px;">
                 <div class="log-line log-info">Idle. Configure URLs and save.</div>
             </div>
-        </div>
-    </div>
 
-    <!-- TAB: EXPORT -->
-    <div class="tab-pane" id="tab-export">
-        <div class="bulk-section">
-            <h3>📊 Export Data</h3>
-            <p class="hint">Choose format:</p>
-
-            <div class="export-options">
-                <button id="btn-export-jobs-csv" class="btn btn-primary export-card">
-                    <div class="export-icon">💼</div>
-                    <div class="export-title">Jobs CSV</div>
-                    <div class="export-desc">One row per job<br>(your expected format)</div>
-                </button>
-                <button id="btn-export-profiles-csv" class="btn btn-primary export-card">
-                    <div class="export-icon">👥</div>
-                    <div class="export-title">Profiles CSV</div>
-                    <div class="export-desc">One row per recruiter</div>
-                </button>
-                <button id="btn-export-json" class="btn btn-primary export-card">
-                    <div class="export-icon">📦</div>
-                    <div class="export-title">Full JSON</div>
-                    <div class="export-desc">Complete raw data</div>
-                </button>
-            </div>
-
-            <div style="margin-top: 20px;">
-                <button id="btn-clear" class="btn btn-danger" style="width:100%">🗑️ Clear All Saved Data</button>
+            <div style="margin-top:12px;">
+                <button id="btn-clear" class="btn btn-danger" style="width:100%">🗑️ Clear Local Profiles</button>
             </div>
         </div>
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.5.0 · 🤖 Auto-Pull</p>
+        <p>LinkedIn Recruiter Intelligence v0.6.0 · 🤖 Auto-Pull · Minimal</p>
     </footer>
 
     <script src="popup.js"></script>
