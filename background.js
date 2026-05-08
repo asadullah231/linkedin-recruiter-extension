@@ -8,7 +8,7 @@
  *  - Progress tracking + notifications to popup
  */
 
-console.log('🟢 LRI Background v0.4.0 loaded');
+console.log('🟢 LRI Background v0.5.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -101,6 +101,99 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
         });
         return true;
+    }
+
+    if (message.action === 'setAutoPull') {
+        if (message.enabled) {
+            chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
+            console.log('🤖 Auto-pull ENABLED (every 30s)');
+        } else {
+            chrome.alarms.clear('auto-pull');
+            console.log('🛑 Auto-pull DISABLED');
+        }
+        sendResponse({ success: true });
+        return true;
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// AUTO-PULL — periodic check for new URLs from n8n
+// ═══════════════════════════════════════════════════════════════════════
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+    if (alarm.name !== 'auto-pull') return;
+    if (bulkState.isRunning) {
+        console.log('🤖 Auto-pull skipped: scrape already running');
+        return;
+    }
+
+    try {
+        const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+        if (!n8nSettings.autoPull || !n8nSettings.pullUrl) return;
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (n8nSettings.apiKey) headers['Authorization'] = `Bearer ${n8nSettings.apiKey}`;
+
+        const res = await fetch(n8nSettings.pullUrl, { method: 'GET', headers });
+        if (!res.ok) {
+            console.log(`🤖 Auto-pull HTTP ${res.status}`);
+            return;
+        }
+
+        const data = await res.json();
+        const urls = extractUrls(data);
+        if (urls.length === 0) {
+            console.log('🤖 Auto-pull: no pending URLs');
+            return;
+        }
+
+        console.log(`🤖 Auto-pull: ${urls.length} URLs received → starting scrape`);
+        await startBulkScrape(urls, { delay: 6, enrichJobs: false });
+    } catch (err) {
+        console.error('🤖 Auto-pull error:', err);
+    }
+});
+
+function extractUrls(data) {
+    let items = [];
+    if (Array.isArray(data)) items = data;
+    else if (Array.isArray(data?.urls)) items = data.urls;
+    else if (Array.isArray(data?.data)) items = data.data;
+    else if (Array.isArray(data?.items)) items = data.items;
+
+    const urls = [];
+    const seen = new Set();
+    for (const item of items) {
+        let url = null;
+        if (typeof item === 'string') url = item;
+        else if (item && typeof item === 'object') {
+            url = item['Profile URL'] || item.profileUrl || item.url
+                || item['LinkedIn-Profile'] || item.linkedinUrl;
+        }
+        if (!url) continue;
+        const m = String(url).match(/https?:\/\/[\w.]*linkedin\.com\/in\/[^\s,"'<>]+/i);
+        if (m) {
+            const clean = m[0].replace(/\/$/, '');
+            if (!seen.has(clean)) { seen.add(clean); urls.push(clean); }
+        }
+    }
+    return urls;
+}
+
+// Re-arm alarm on service worker startup
+chrome.runtime.onStartup.addListener(async () => {
+    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+    if (n8nSettings.autoPull) {
+        chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
+        console.log('🤖 Auto-pull re-armed on startup');
+    }
+});
+
+chrome.runtime.onInstalled.addListener(async () => {
+    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+    if (n8nSettings.autoPull) {
+        chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
+        console.log('🤖 Auto-pull armed after install/update');
     }
 });
 

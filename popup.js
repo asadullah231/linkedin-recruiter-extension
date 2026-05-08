@@ -464,6 +464,8 @@ async function loadN8nSettings() {
     document.getElementById('n8n-callback-url').value = n8nSettings.callbackUrl || '';
     document.getElementById('n8n-api-key').value = n8nSettings.apiKey || '';
     document.getElementById('n8n-auto-send').checked = !!n8nSettings.autoSend;
+    const autoPullEl = document.getElementById('n8n-auto-pull');
+    if (autoPullEl) autoPullEl.checked = !!n8nSettings.autoPull;
 }
 
 function setupN8nListeners() {
@@ -474,14 +476,23 @@ function setupN8nListeners() {
 }
 
 async function saveN8nSettings() {
+    const autoPullEl = document.getElementById('n8n-auto-pull');
     const settings = {
         pullUrl: document.getElementById('n8n-pull-url').value.trim(),
         callbackUrl: document.getElementById('n8n-callback-url').value.trim(),
         apiKey: document.getElementById('n8n-api-key').value.trim(),
-        autoSend: document.getElementById('n8n-auto-send').checked
+        autoSend: document.getElementById('n8n-auto-send').checked,
+        autoPull: autoPullEl ? autoPullEl.checked : false
     };
     await chrome.storage.local.set({ n8nSettings: settings });
-    n8nLog('💾 Settings saved.', 'success');
+
+    // Tell background to start/stop auto-pull alarm
+    await chrome.runtime.sendMessage({
+        action: 'setAutoPull',
+        enabled: settings.autoPull
+    }).catch(() => {});
+
+    n8nLog(`💾 Settings saved.${settings.autoPull ? ' 🤖 Auto-pull ENABLED.' : ''}`, 'success');
 }
 
 function getN8nSettings() {
