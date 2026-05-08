@@ -560,11 +560,6 @@ async function pullFromN8n() {
 }
 
 function extractUrlsFromN8nPayload(data) {
-    // Accept multiple shapes:
-    //  - ["url1", "url2"]
-    //  - [{ "Profile URL": "..." }, ...]
-    //  - { "urls": [...] }
-    //  - { "data": [...] }
     let items = [];
     if (Array.isArray(data)) items = data;
     else if (Array.isArray(data?.urls)) items = data.urls;
@@ -578,7 +573,20 @@ function extractUrlsFromN8nPayload(data) {
         if (typeof item === 'string') url = item;
         else if (item && typeof item === 'object') {
             url = item['Profile URL'] || item.profileUrl || item.url
-                || item.Url || item.URL || item.linkedinUrl;
+                || item['LinkedIn-Profile'] || item.linkedinUrl
+                || item.ProfileURL || item.ProfileUrl || item['Profile Url']
+                || item.profile_url || item['profile-url']
+                || item.Url || item.URL;
+            if (!url) {
+                // Fallback: scan ALL string fields for any LinkedIn URL
+                for (const k of Object.keys(item)) {
+                    const v = item[k];
+                    if (typeof v === 'string' && /linkedin\.com\/in\//i.test(v)) {
+                        url = v;
+                        break;
+                    }
+                }
+            }
         }
         if (!url) continue;
 

@@ -143,12 +143,24 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
         const data = await res.json();
         const urls = extractUrls(data);
+
+        // Diagnostic: how many raw items did we receive vs. how many valid URLs
+        const rawCount = (Array.isArray(data) ? data
+                        : data?.urls || data?.data || data?.items || []).length;
+
         if (urls.length === 0) {
-            console.log('🤖 Auto-pull: no pending URLs');
+            if (rawCount > 0) {
+                console.warn(`⚠️ Auto-pull: received ${rawCount} items but 0 valid LinkedIn URLs.`);
+                console.warn('First item keys:', Object.keys((data?.urls || data?.data || [])[0] || {}));
+                console.warn('First item:', (data?.urls || data?.data || [])[0]);
+            } else {
+                console.log('🤖 Auto-pull: no pending URLs');
+            }
             return;
         }
 
-        console.log(`🤖 Auto-pull: ${urls.length} URLs received → starting scrape`);
+        console.log(`🤖 Auto-pull: ${urls.length} valid URLs → starting scrape`);
+        console.log('First URL:', urls[0]);
         await startBulkScrape(urls, { delay: 6, enrichJobs: false });
     } catch (err) {
         console.error('🤖 Auto-pull error:', err);
@@ -168,8 +180,21 @@ function extractUrls(data) {
         let url = null;
         if (typeof item === 'string') url = item;
         else if (item && typeof item === 'object') {
+            // Try every common variant — case-insensitive last-resort
             url = item['Profile URL'] || item.profileUrl || item.url
-                || item['LinkedIn-Profile'] || item.linkedinUrl;
+                || item['LinkedIn-Profile'] || item.linkedinUrl
+                || item.ProfileURL || item.ProfileUrl || item['Profile Url']
+                || item.profile_url || item['profile-url'];
+            if (!url) {
+                // Fallback: scan ALL string fields for a LinkedIn URL
+                for (const k of Object.keys(item)) {
+                    const v = item[k];
+                    if (typeof v === 'string' && /linkedin\.com\/in\//i.test(v)) {
+                        url = v;
+                        break;
+                    }
+                }
+            }
         }
         if (!url) continue;
         const m = String(url).match(/https?:\/\/[\w.]*linkedin\.com\/in\/[^\s,"'<>]+/i);
