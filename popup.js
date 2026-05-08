@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     await syncBulkState();
     setupBulkProgressListener();
+    await loadN8nSettings();
+    setupN8nListeners();
 });
 
 async function loadProfiles() {
@@ -482,6 +484,208 @@ function downloadFile(content, filename, mimeType) {
     } else {
         fallbackDownload(url, filename);
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// n8n INTEGRATION
+// ═══════════════════════════════════════════════════════════════════════
+
+async function loadN8nSettings() {
+    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+    document.getElementById('n8n-pull-url').value = n8nSettings.pullUrl || '';
+    document.getElementById('n8n-callback-url').value = n8nSettings.callbackUrl || '';
+    document.getElementById('n8n-api-key').value = n8nSettings.apiKey || '';
+    document.getElementById('n8n-auto-send').checked = !!n8nSettings.autoSend;
+}
+
+function setupN8nListeners() {
+    document.getElementById('btn-n8n-save').addEventListener('click', saveN8nSettings);
+    document.getElementById('btn-n8n-pull').addEventListener('click', pullFromN8n);
+    document.getElementById('btn-n8n-send').addEventListener('click', sendToN8n);
+    document.getElementById('btn-n8n-test').addEventListener('click', testN8nConnection);
+}
+
+async function saveN8nSettings() {
+    const settings = {
+        pullUrl: document.getElementById('n8n-pull-url').value.trim(),
+        callbackUrl: document.getElementById('n8n-callback-url').value.trim(),
+        apiKey: document.getElementById('n8n-api-key').value.trim(),
+        autoSend: document.getElementById('n8n-auto-send').checked
+    };
+    await chrome.storage.local.set({ n8nSettings: settings });
+    n8nLog('💾 Settings saved.', 'success');
+}
+
+function getN8nSettings() {
+    return {
+        pullUrl: document.getElementById('n8n-pull-url').value.trim(),
+        callbackUrl: document.getElementById('n8n-callback-url').value.trim(),
+        apiKey: document.getElementById('n8n-api-key').value.trim()
+    };
+}
+
+function buildN8nHeaders(apiKey, contentType = 'application/json') {
+    const h = { 'Content-Type': contentType };
+    if (apiKey) h['Authorization'] = `Bearer ${apiKey}`;
+    return h;
+}
+
+async function pullFromN8n() {
+    const { pullUrl, apiKey } = getN8nSettings();
+    if (!pullUrl) {
+        n8nLog('❌ Pull URL not configured.', 'error');
+        return;
+    }
+
+    n8nLog(`📥 Fetching from ${pullUrl}...`, 'info');
+
+    try {
+        const res = await fetch(pullUrl, {
+            method: 'GET',
+            headers: buildN8nHeaders(apiKey)
+        });
+
+        if (!res.ok) {
+            n8nLog(`❌ HTTP ${res.status}: ${res.statusText}`, 'error');
+            return;
+        }
+
+        const data = await res.json();
+        const urls = extractUrlsFromN8nPayload(data);
+
+        if (urls.length === 0) {
+            n8nLog('⚠️ No LinkedIn URLs found in response.', 'error');
+            return;
+        }
+
+        // Switch to Bulk tab and populate
+        document.querySelector('[data-tab="bulk"]').click();
+        document.getElementById('bulk-urls').value = urls.join('\n');
+        n8nLog(`✅ Pulled ${urls.length} URLs → Bulk tab.`, 'success');
+    } catch (err) {
+        n8nLog(`❌ ${err.message}`, 'error');
+    }
+}
+
+function extractUrlsFromN8nPayload(data) {
+    // Accept multiple shapes:
+    //  - ["url1", "url2"]
+    //  - [{ "Profile URL": "..." }, ...]
+    //  - { "urls": [...] }
+    //  - { "data": [...] }
+    let items = [];
+    if (Array.isArray(data)) items = data;
+    else if (Array.isArray(data?.urls)) items = data.urls;
+    else if (Array.isArray(data?.data)) items = data.data;
+    else if (Array.isArray(data?.items)) items = data.items;
+
+    const urls = [];
+    const seen = new Set();
+    for (const item of items) {
+        let url = null;
+        if (typeof item === 'string') url = item;
+        else if (item && typeof item === 'object') {
+            url = item['Profile URL'] || item.profileUrl || item.url
+                || item.Url || item.URL || item.linkedinUrl;
+        }
+        if (!url) continue;
+
+        const m = String(url).match(/https?:\/\/[\w.]*linkedin\.com\/in\/[^\s,"'<>]+/i);
+        if (m) {
+            const clean = m[0].replace(/\/$/, '');
+            if (!seen.has(clean)) {
+                seen.add(clean);
+                urls.push(clean);
+            }
+        }
+    }
+    return urls;
+}
+
+async function sendToN8n() {
+    const { callbackUrl, apiKey } = getN8nSettings();
+    if (!callbackUrl) {
+        n8nLog('❌ Callback URL not configured.', 'error');
+        return;
+    }
+
+    if (allProfiles.length === 0) {
+        n8nLog('⚠️ No profiles to send.', 'error');
+        return;
+    }
+
+    n8nLog(`📤 Sending ${allProfiles.length} profiles to n8n...`, 'info');
+
+    const jobsCsv = buildJobsCsv(allProfiles);
+    const profilesCsv = buildProfilesCsv(allProfiles);
+
+    const payload = {
+        source: 'linkedin-recruiter-extension',
+        version: '0.3.0',
+        timestamp: new Date().toISOString(),
+        counts: {
+            profiles: allProfiles.length,
+            jobs: allProfiles.reduce((n, p) => n + (p.hiringPosts?.length || 0), 0)
+        },
+        profiles: allProfiles,
+        csv: {
+            jobs: jobsCsv,
+            profiles: profilesCsv
+        }
+    };
+
+    try {
+        const res = await fetch(callbackUrl, {
+            method: 'POST',
+            headers: buildN8nHeaders(apiKey),
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            n8nLog(`❌ HTTP ${res.status}: ${res.statusText}`, 'error');
+            return;
+        }
+        n8nLog(`✅ Sent ${allProfiles.length} profiles to n8n.`, 'success');
+    } catch (err) {
+        n8nLog(`❌ ${err.message}`, 'error');
+    }
+}
+
+async function testN8nConnection() {
+    const { pullUrl, callbackUrl, apiKey } = getN8nSettings();
+    if (!pullUrl && !callbackUrl) {
+        n8nLog('❌ Configure at least one URL.', 'error');
+        return;
+    }
+
+    if (pullUrl) {
+        n8nLog(`🔌 Testing pull URL...`, 'info');
+        try {
+            const r = await fetch(pullUrl, { method: 'GET', headers: buildN8nHeaders(apiKey) });
+            n8nLog(`  Pull → HTTP ${r.status}`, r.ok ? 'success' : 'error');
+        } catch (e) { n8nLog(`  Pull failed: ${e.message}`, 'error'); }
+    }
+
+    if (callbackUrl) {
+        n8nLog(`🔌 Testing callback URL...`, 'info');
+        try {
+            const r = await fetch(callbackUrl, {
+                method: 'POST',
+                headers: buildN8nHeaders(apiKey),
+                body: JSON.stringify({ test: true, source: 'linkedin-recruiter-extension' })
+            });
+            n8nLog(`  Callback → HTTP ${r.status}`, r.ok ? 'success' : 'error');
+        } catch (e) { n8nLog(`  Callback failed: ${e.message}`, 'error'); }
+    }
+}
+
+function n8nLog(message, type = 'info') {
+    const container = document.getElementById('n8n-status');
+    const line = document.createElement('div');
+    line.className = `log-line log-${type}`;
+    const stamp = new Date().toLocaleTimeString();
+    line.textContent = `[${stamp}] ${message}`;
+    container.appendChild(line);
+    container.scrollTop = container.scrollHeight;
 }
 
 function fallbackDownload(url, filename) {

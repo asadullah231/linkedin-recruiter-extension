@@ -8,7 +8,7 @@
  *  - Progress tracking + notifications to popup
  */
 
-console.log('🟢 LRI Background v0.2.0 loaded');
+console.log('🟢 LRI Background v0.3.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -222,6 +222,51 @@ async function runBulkQueue() {
             message: `Saved ${savedCount} profiles with hiring jobs (${skippedCount} skipped)`
         });
     } catch {}
+
+    // ── n8n auto-callback ──
+    try {
+        const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+        if (n8nSettings.autoSend && n8nSettings.callbackUrl) {
+            await sendBulkResultsToN8n(n8nSettings, savedCount, skippedCount);
+        }
+    } catch (err) {
+        bulkLog(`⚠️ n8n callback error: ${err.message}`, 'error');
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// n8n CALLBACK (auto-send after bulk completes)
+// ═══════════════════════════════════════════════════════════════════════
+
+async function sendBulkResultsToN8n(settings, savedCount, skippedCount) {
+    const profiles = await getAllProfiles();
+    const headers = { 'Content-Type': 'application/json' };
+    if (settings.apiKey) headers['Authorization'] = `Bearer ${settings.apiKey}`;
+
+    const payload = {
+        source: 'linkedin-recruiter-extension',
+        version: '0.3.0',
+        timestamp: new Date().toISOString(),
+        run: {
+            saved: savedCount,
+            skipped: skippedCount,
+            total: bulkState.totalUrls
+        },
+        profiles
+    };
+
+    bulkLog(`📤 Auto-sending results to n8n: ${settings.callbackUrl}`, 'info');
+    const res = await fetch(settings.callbackUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+        bulkLog(`✅ n8n callback OK (HTTP ${res.status})`, 'success');
+    } else {
+        bulkLog(`⚠️ n8n callback HTTP ${res.status}`, 'error');
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════

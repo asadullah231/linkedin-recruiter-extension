@@ -2,16 +2,48 @@
 
 Capture recruiter profiles + their **active hiring posts** (the specific jobs they're working on) directly from LinkedIn while you browse.
 
-## ✨ Features (MVP v0.1.0)
+## ✨ Features (v0.3.0)
 
 - ✅ **Floating "Save Profile" button** on every LinkedIn profile page
 - ✅ Extracts profile data: name, headline, location, current company, about
 - ✅ ⭐ **Hiring posts extraction** — the specific jobs the recruiter is actively working on
+- ✅ **Bulk Mode** — paste many URLs or upload a CSV
+- ✅ 🔗 **n8n Integration** — pull URLs from a webhook, auto-POST results when bulk completes
 - ✅ Local storage — all data saved in your browser
 - ✅ Search/filter saved profiles
 - ✅ Export to JSON or CSV
-- ✅ No backend required — 100% local
 - ✅ No bot detection — uses your real LinkedIn session
+
+## 🔗 n8n Integration
+
+Open the **🔗 n8n** tab in the popup:
+
+| Field | Purpose |
+|-------|---------|
+| **Pull URLs Webhook (GET)** | n8n endpoint that returns pending LinkedIn URLs |
+| **Results Webhook (POST)** | n8n endpoint that receives scraped data |
+| **API Key** | Optional — sent as `Authorization: Bearer <key>` |
+| **Auto-send** | When checked, results POST automatically after each bulk run |
+
+**Accepted Pull payload shapes:**
+```json
+["https://linkedin.com/in/foo", ...]
+[ { "Profile URL": "..." }, ... ]
+{ "urls": [...] }
+{ "data": [...] }
+```
+
+**Result payload (sent to your n8n webhook):**
+```json
+{
+  "source": "linkedin-recruiter-extension",
+  "version": "0.3.0",
+  "timestamp": "2026-...",
+  "run": { "saved": N, "skipped": N, "total": N },
+  "profiles": [ ... ],
+  "csv": { "jobs": "...", "profiles": "..." }
+}
+```
 
 ## 🚀 Installation (5 minutes)
 

@@ -19,7 +19,8 @@
     <!-- Tab navigation -->
     <nav class="tabs">
         <button class="tab-btn active" data-tab="profiles">📋 Saved</button>
-        <button class="tab-btn" data-tab="bulk">📥 Bulk Mode</button>
+        <button class="tab-btn" data-tab="bulk">📥 Bulk</button>
+        <button class="tab-btn" data-tab="n8n">🔗 n8n</button>
         <button class="tab-btn" data-tab="export">📊 Export</button>
     </nav>
 
@@ -87,6 +88,50 @@ https://www.linkedin.com/in/username3"></textarea>
         </div>
     </div>
 
+    <!-- TAB: n8n SYNC -->
+    <div class="tab-pane" id="tab-n8n">
+        <div class="bulk-section">
+            <h3>🔗 n8n Integration</h3>
+            <p class="hint">Connect to your n8n workflow. Pull pending URLs from a queue, auto-send results back when scraping completes.</p>
+
+            <div class="input-group">
+                <label>📥 Pull URLs Webhook (GET):</label>
+                <input type="text" id="n8n-pull-url" placeholder="https://n8n.emergeautomation.tech/webhook/pull-urls" />
+                <p class="hint-small">n8n endpoint that returns pending LinkedIn URLs as JSON array.</p>
+            </div>
+
+            <div class="input-group">
+                <label>📤 Results Webhook (POST):</label>
+                <input type="text" id="n8n-callback-url" placeholder="https://n8n.emergeautomation.tech/webhook/scrape-results" />
+                <p class="hint-small">Where to POST scraped CSV/JSON when bulk run finishes.</p>
+            </div>
+
+            <div class="input-group">
+                <label>🔑 API Key (optional):</label>
+                <input type="password" id="n8n-api-key" placeholder="Bearer token or shared secret" />
+                <p class="hint-small">Sent as <code>Authorization: Bearer &lt;key&gt;</code> header.</p>
+            </div>
+
+            <div class="settings-row">
+                <label>
+                    <input type="checkbox" id="n8n-auto-send" />
+                    Auto-send results to n8n when bulk completes
+                </label>
+            </div>
+
+            <div class="actions">
+                <button id="btn-n8n-save" class="btn btn-primary">💾 Save Settings</button>
+                <button id="btn-n8n-pull" class="btn btn-primary">📥 Pull URLs</button>
+                <button id="btn-n8n-send" class="btn btn-primary">📤 Send Now</button>
+                <button id="btn-n8n-test" class="btn btn-danger">🔌 Test</button>
+            </div>
+
+            <div id="n8n-status" class="progress-log" style="margin-top:12px; min-height:60px;">
+                <div class="log-line log-info">Idle. Configure URLs and save.</div>
+            </div>
+        </div>
+    </div>
+
     <!-- TAB: EXPORT -->
     <div class="tab-pane" id="tab-export">
         <div class="bulk-section">
@@ -118,7 +163,7 @@ https://www.linkedin.com/in/username3"></textarea>
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.2.1 · Fast Bulk</p>
+        <p>LinkedIn Recruiter Intelligence v0.3.0 · Fast Bulk · n8n</p>
     </footer>
 
     <script src="popup.js"></script>

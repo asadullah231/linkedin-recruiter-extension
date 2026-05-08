@@ -183,6 +183,30 @@ header {
     border: none;
     padding: 0;
     margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.bulk-section .actions .btn {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 110px;
+}
+
+#tab-n8n input[type="text"],
+#tab-n8n input[type="password"] {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-sizing: border-box;
+    font-family: monospace;
+}
+
+#tab-n8n code {
+    background: #f3f4f6;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 10px;
 }
 
 .btn {
