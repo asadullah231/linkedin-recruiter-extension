@@ -19,7 +19,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupBulkProgressListener();
     await loadN8nSettings();
     setupN8nListeners();
+    await refreshStatusIndicator();
+    setInterval(refreshStatusIndicator, 2000);  // every 2 sec while popup is open
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// STATUS INDICATOR (header pill + live bar)
+// ═══════════════════════════════════════════════════════════════════════
+
+async function refreshStatusIndicator() {
+    const pill = document.getElementById('status-pill');
+    const text = document.getElementById('status-text');
+    const liveBar = document.getElementById('live-status-bar');
+    if (!pill || !text) return;
+
+    const [{ n8nSettings = {} }, bulkRes] = await Promise.all([
+        chrome.storage.local.get('n8nSettings'),
+        chrome.runtime.sendMessage({ action: 'getBulkState' }).catch(() => null)
+    ]);
+
+    const state = bulkRes?.state;
+    pill.classList.remove('status-idle', 'status-active', 'status-scraping', 'status-error');
+
+    if (state?.isRunning) {
+        // Currently scraping
+        pill.classList.add('status-scraping');
+        text.textContent = `Scraping ${state.currentIndex + 1}/${state.totalUrls}`;
+
+        // Show live bar across tabs
+        liveBar.style.display = 'flex';
+        document.getElementById('ls-action').textContent = 'Scraping profiles';
+        document.getElementById('ls-current').textContent = state.currentIndex + 1;
+        document.getElementById('ls-total').textContent = state.totalUrls;
+        const pct = state.totalUrls > 0 ? ((state.currentIndex + 1) / state.totalUrls) * 100 : 0;
+        document.getElementById('ls-bar-fill').style.width = pct + '%';
+        const lastLog = state.log?.[state.log.length - 1];
+        document.getElementById('ls-detail').textContent = lastLog?.message || 'Working...';
+    } else if (n8nSettings.autoPull) {
+        // Auto-pull armed, waiting
+        pill.classList.add('status-active');
+        text.textContent = '🤖 Auto-pull ON';
+        liveBar.style.display = 'none';
+    } else {
+        pill.classList.add('status-idle');
+        text.textContent = 'Idle';
+        liveBar.style.display = 'none';
+    }
+}
 
 async function loadProfiles() {
     const response = await chrome.runtime.sendMessage({ action: 'getProfiles' });

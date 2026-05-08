@@ -111,6 +111,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             chrome.alarms.clear('auto-pull');
             console.log('🛑 Auto-pull DISABLED');
         }
+        updateBadge();
         sendResponse({ success: true });
         return true;
     }
@@ -482,6 +483,9 @@ function bulkLog(message, type = 'info') {
     if (bulkState.log.length > 200) bulkState.log = bulkState.log.slice(-100);
     console.log(`[BULK] ${message}`);
 
+    // Update extension icon badge with progress
+    updateBadge();
+
     // Notify popup if open
     chrome.runtime.sendMessage({
         action: 'bulkProgress',
@@ -490,6 +494,31 @@ function bulkLog(message, type = 'info') {
         isRunning: bulkState.isRunning,
         latestLog: entry
     }).catch(() => {}); // Popup may not be open
+}
+
+function updateBadge() {
+    try {
+        if (bulkState.isRunning) {
+            // Show "X/Y" or just current index
+            const txt = `${bulkState.currentIndex + 1}/${bulkState.totalUrls}`;
+            chrome.action.setBadgeText({ text: txt.length > 4 ? `${bulkState.currentIndex + 1}` : txt });
+            chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' });  // orange = scraping
+            chrome.action.setTitle({ title: `🔄 Scraping ${bulkState.currentIndex + 1} of ${bulkState.totalUrls}...` });
+        } else {
+            chrome.storage.local.get('n8nSettings').then(({ n8nSettings = {} }) => {
+                if (n8nSettings.autoPull) {
+                    chrome.action.setBadgeText({ text: 'ON' });
+                    chrome.action.setBadgeBackgroundColor({ color: '#22c55e' });  // green = auto-pull armed
+                    chrome.action.setTitle({ title: '🤖 Auto-pull ON — checking n8n every 30s' });
+                } else {
+                    chrome.action.setBadgeText({ text: '' });
+                    chrome.action.setTitle({ title: 'LinkedIn Recruiter Intelligence' });
+                }
+            });
+        }
+    } catch (err) {
+        console.error('Badge update error:', err);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════

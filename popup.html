@@ -11,10 +11,33 @@
             <span class="logo-icon">🎯</span>
             <h1>Recruiter Intel</h1>
         </div>
-        <div class="stats">
-            <span id="profile-count">0</span> profiles
+        <div class="header-right">
+            <div id="status-pill" class="status-pill status-idle">
+                <span class="status-dot"></span>
+                <span id="status-text">Idle</span>
+            </div>
+            <div class="stats">
+                <span id="profile-count">0</span>
+            </div>
         </div>
     </header>
+
+    <!-- LIVE STATUS BAR (visible on all tabs when scraping) -->
+    <div id="live-status-bar" class="live-status-bar" style="display:none">
+        <div class="ls-icon">🔄</div>
+        <div class="ls-content">
+            <div class="ls-title">
+                <span id="ls-action">Scraping</span>
+                <span class="ls-progress">
+                    <span id="ls-current">0</span>/<span id="ls-total">0</span>
+                </span>
+            </div>
+            <div class="ls-bar">
+                <div class="ls-bar-fill" id="ls-bar-fill"></div>
+            </div>
+            <div class="ls-detail" id="ls-detail">Working...</div>
+        </div>
+    </div>
 
     <!-- Tab navigation -->
     <nav class="tabs">
@@ -175,7 +198,7 @@
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.6.1 · 🤖 Auto-Pull · Friendly UI</p>
+        <p>LinkedIn Recruiter Intelligence v0.7.0 · 🤖 Live Status</p>
     </footer>
 
     <script src="popup.js"></script>

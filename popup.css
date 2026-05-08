@@ -644,6 +644,148 @@ main::-webkit-scrollbar-thumb,
     margin-bottom: 6px;
 }
 
+/* ═══════════════════════════════════════════════ */
+/* STATUS PILL (in header)                          */
+/* ═══════════════════════════════════════════════ */
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    backdrop-filter: blur(4px);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #94a3b8;
+}
+
+.status-idle .status-dot {
+    background: #94a3b8;
+}
+
+.status-active .status-dot {
+    background: #22c55e;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    animation: pulse-green 2s infinite;
+}
+
+.status-scraping .status-dot {
+    background: #fbbf24;
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7);
+    animation: pulse-yellow 1s infinite;
+}
+
+.status-error .status-dot {
+    background: #ef4444;
+}
+
+@keyframes pulse-green {
+    0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+    70%  { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+@keyframes pulse-yellow {
+    0%   { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.8); transform: scale(1); }
+    50%  { box-shadow: 0 0 0 5px rgba(251, 191, 36, 0); transform: scale(1.15); }
+    100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); transform: scale(1); }
+}
+
+.stats {
+    background: rgba(255, 255, 255, 0.15);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════ */
+/* LIVE STATUS BAR (across all tabs)                */
+/* ═══════════════════════════════════════════════ */
+
+.live-status-bar {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border-bottom: 2px solid #f59e0b;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from { transform: translateY(-100%); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+}
+
+.ls-icon {
+    font-size: 22px;
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.ls-content {
+    flex: 1;
+}
+
+.ls-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: #92400e;
+}
+
+.ls-progress {
+    font-size: 12px;
+    background: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: #92400e;
+}
+
+.ls-bar {
+    height: 5px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 3px;
+    margin: 6px 0 4px;
+    overflow: hidden;
+}
+
+.ls-bar-fill {
+    height: 100%;
+    background: #f59e0b;
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.ls-detail {
+    font-size: 11px;
+    color: #b45309;
+    font-weight: 500;
+}
+
 
 /* ─────────────────────────────────────────────── */
 /* n8n TAB — friendly UX                            */
