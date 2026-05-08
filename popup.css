@@ -532,3 +532,122 @@ main::-webkit-scrollbar-thumb,
     background: #d1d5db;
     border-radius: 4px;
 }
+
+/* ═══════════════════════════════════════════════ */
+/* n8n TAB — friendly UX                            */
+/* ═══════════════════════════════════════════════ */
+
+.info-banner {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    color: #1e40af;
+}
+
+.flow-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-top: 6px;
+    font-size: 11px;
+    color: #1e3a8a;
+}
+
+.flow-steps span:nth-child(odd) {
+    background: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.badge-info,
+.badge-optional,
+.badge-recommended {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.badge-info { background: #dbeafe; color: #1e40af; }
+.badge-optional { background: #f3f4f6; color: #6b7280; }
+.badge-recommended { background: #dcfce7; color: #166534; }
+
+.divider {
+    margin: 18px 0;
+    border: none;
+    border-top: 1px dashed #e5e7eb;
+}
+
+.mode-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    transition: all 0.15s;
+}
+
+.mode-card:has(input:checked) {
+    border-color: #0a66c2;
+    background: #eff6ff;
+}
+
+.mode-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.mode-title {
+    font-size: 13px;
+}
+
+.mode-desc {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 6px;
+    margin-left: 24px;
+    line-height: 1.5;
+}
+
+.queue-status {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #f3f4f6;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #374151;
+}
+
+.btn-success {
+    background: #10b981 !important;
+    color: white !important;
+}
+.btn-success:hover {
+    background: #059669 !important;
+}
+
+#tab-n8n h3 {
+    font-size: 14px;
+    margin-top: 4px;
+    margin-bottom: 6px;
+}
+
+
+/* ─────────────────────────────────────────────── */
+/* n8n TAB — friendly UX                            */
+/* ─────────────────────────────────────────────── */
+
+.info-banner {
+    background: linear-gradient(135deg, #eff6ff 0

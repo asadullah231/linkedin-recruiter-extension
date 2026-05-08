@@ -36,75 +36,117 @@
         </main>
     </div>
 
-    <!-- TAB: n8n SYNC (now includes scraping engine) -->
+    <!-- TAB: n8n SYNC -->
     <div class="tab-pane" id="tab-n8n">
         <div class="bulk-section">
-            <h3>🔗 n8n Integration</h3>
-            <p class="hint">Pull pending LinkedIn URLs from your n8n queue, scrape them, and auto-send results back.</p>
+
+            <!-- HOW IT WORKS BANNER -->
+            <div class="info-banner">
+                <strong>🔄 How it works:</strong>
+                <div class="flow-steps">
+                    <span>1️⃣ Slack upload</span>
+                    <span>→</span>
+                    <span>2️⃣ n8n queues URLs</span>
+                    <span>→</span>
+                    <span>3️⃣ Extension scrapes</span>
+                    <span>→</span>
+                    <span>4️⃣ CSV back to Slack</span>
+                </div>
+            </div>
+
+            <!-- ────────────────────────────────────────────── -->
+            <!-- STEP 1: SETUP                                  -->
+            <!-- ────────────────────────────────────────────── -->
+            <h3>⚙️ Step 1 — Setup (one-time)</h3>
+            <p class="hint">Paste your n8n webhook URLs. Get them from your n8n workflows.</p>
 
             <div class="input-group">
-                <label>📥 Pull URLs Webhook (GET):</label>
-                <input type="text" id="n8n-pull-url" placeholder="https://n8n.emergeautomation.tech/webhook/pull-urls" />
+                <label>📥 <strong>Pull URL</strong> <span class="badge-info">where I get URLs</span></label>
+                <input type="text" id="n8n-pull-url" placeholder="https://n8n.../webhook/pull-urls" />
+                <p class="hint-small">Extension calls this to fetch pending LinkedIn URLs from n8n.</p>
             </div>
 
             <div class="input-group">
-                <label>📤 Results Webhook (POST):</label>
-                <input type="text" id="n8n-callback-url" placeholder="https://n8n.emergeautomation.tech/webhook/scrape-results" />
+                <label>📤 <strong>Results URL</strong> <span class="badge-info">where I send scraped data</span></label>
+                <input type="text" id="n8n-callback-url" placeholder="https://n8n.../webhook/scrape-results" />
+                <p class="hint-small">Extension posts scraped profiles here when done. n8n then uploads CSV back to Slack.</p>
             </div>
 
-            <div class="input-group">
-                <label>🔑 API Key (optional):</label>
-                <input type="password" id="n8n-api-key" placeholder="Bearer token or shared secret" />
-            </div>
-
-            <div class="settings-row">
-                <label>
-                    <input type="checkbox" id="n8n-auto-send" />
-                    Auto-send results to n8n when scraping completes
-                </label>
-            </div>
-
-            <div class="settings-row">
-                <label>
-                    <input type="checkbox" id="n8n-auto-pull" />
-                    🤖 <strong>Auto-pull URLs every 30 seconds</strong>
-                    <br><small>Extension will keep checking n8n for new URLs and scrape them automatically. No manual clicks needed.</small>
-                </label>
+            <div class="input-group collapse-group">
+                <label class="collapse-toggle">🔑 <strong>API Key</strong> <span class="badge-optional">optional · for security</span></label>
+                <input type="password" id="n8n-api-key" placeholder="Leave empty for now" />
+                <p class="hint-small">Only needed if your n8n webhooks require auth. Skip during testing.</p>
             </div>
 
             <div class="actions">
-                <button id="btn-n8n-save" class="btn btn-primary">💾 Save</button>
-                <button id="btn-n8n-test" class="btn btn-primary">🔌 Test</button>
-                <button id="btn-n8n-send" class="btn btn-primary">📤 Send Now</button>
+                <button id="btn-n8n-save" class="btn btn-primary">💾 Save Settings</button>
+                <button id="btn-n8n-test" class="btn btn-primary">🔌 Test Connection</button>
             </div>
 
-            <hr style="margin:16px 0; border:none; border-top:1px solid #e5e7eb;">
+            <hr class="divider">
 
-            <h3 style="margin-top:0">🚀 Scrape Queue</h3>
-            <p class="hint">Pull URLs from n8n, then start scraping. Results upload back to Slack automatically.</p>
+            <!-- ────────────────────────────────────────────── -->
+            <!-- STEP 2: AUTOMATION MODE                        -->
+            <!-- ────────────────────────────────────────────── -->
+            <h3>🤖 Step 2 — Pick a Mode</h3>
+            <p class="hint">Choose how the extension should run.</p>
+
+            <div class="mode-card">
+                <label class="mode-label">
+                    <input type="checkbox" id="n8n-auto-pull" />
+                    <span class="mode-title">🤖 Fully Automatic <span class="badge-recommended">recommended</span></span>
+                </label>
+                <p class="mode-desc">
+                    Extension auto-checks n8n every <strong>30 seconds</strong> for new URLs and scrapes them — even when popup is closed.
+                    Just keep Chrome open. <em>Zero clicks needed after setup.</em>
+                </p>
+            </div>
+
+            <div class="mode-card">
+                <label class="mode-label">
+                    <input type="checkbox" id="n8n-auto-send" />
+                    <span class="mode-title">📤 Auto-send results when done</span>
+                </label>
+                <p class="mode-desc">
+                    After each scrape finishes, results are POSTed to n8n automatically.
+                    <strong>Keep this ON</strong> — otherwise CSV won't reach Slack.
+                </p>
+            </div>
+
+            <hr class="divider">
+
+            <!-- ────────────────────────────────────────────── -->
+            <!-- STEP 3: MANUAL CONTROL                         -->
+            <!-- ────────────────────────────────────────────── -->
+            <h3>🎮 Step 3 — Manual Run <span class="badge-optional">if not using auto-pull</span></h3>
+            <p class="hint">Click <strong>Pull URLs</strong>, then <strong>Start Scrape</strong>. Results auto-upload to Slack.</p>
+
+            <div class="settings-row">
+                <label>⏱️ Delay between profiles:</label>
+                <input type="number" id="opt-delay" value="6" min="2" max="60" style="width:60px" /> <small>seconds (lower = faster but more risk)</small>
+            </div>
 
             <div class="settings-row">
                 <label>
                     <input type="checkbox" id="opt-enrich-jobs" />
-                    Enrich each job page (slower)
+                    Enrich each job page (visit each job → slower but more detail)
                 </label>
-            </div>
-
-            <div class="settings-row">
-                <label>Delay between profiles (sec):</label>
-                <input type="number" id="opt-delay" value="6" min="2" max="60" style="width:60px" />
             </div>
 
             <div class="actions">
                 <button id="btn-n8n-pull" class="btn btn-primary">📥 Pull URLs</button>
-                <button id="btn-bulk-start" class="btn btn-primary">🚀 Start Scrape</button>
+                <button id="btn-bulk-start" class="btn btn-success">🚀 Start Scrape</button>
                 <button id="btn-bulk-stop" class="btn btn-danger" style="display:none">⏹ Stop</button>
             </div>
 
-            <div id="queue-info" class="hint-small" style="margin-top:8px">No URLs pulled yet.</div>
+            <div id="queue-info" class="queue-status">📭 No URLs pulled yet.</div>
 
+            <!-- ────────────────────────────────────────────── -->
+            <!-- LIVE PROGRESS                                  -->
+            <!-- ────────────────────────────────────────────── -->
             <div id="bulk-progress" style="display:none; margin-top:12px;">
-                <div class="progress-bar-wrap">
+                <strong style="font-size:12px">📊 Scraping progress:</strong>
+                <div class="progress-bar-wrap" style="margin-top:6px">
                     <div class="progress-bar" id="progress-bar"></div>
                 </div>
                 <div class="progress-text">
@@ -114,18 +156,26 @@
                 <div id="progress-log" class="progress-log"></div>
             </div>
 
-            <div id="n8n-status" class="progress-log" style="margin-top:12px; min-height:40px;">
-                <div class="log-line log-info">Idle. Configure URLs and save.</div>
+            <hr class="divider">
+
+            <!-- ────────────────────────────────────────────── -->
+            <!-- ACTIVITY LOG + EXTRAS                          -->
+            <!-- ────────────────────────────────────────────── -->
+            <h3>📜 Activity Log</h3>
+            <div id="n8n-status" class="progress-log" style="min-height:60px;">
+                <div class="log-line log-info">Idle. Configure URLs and save above.</div>
             </div>
 
-            <div style="margin-top:12px;">
-                <button id="btn-clear" class="btn btn-danger" style="width:100%">🗑️ Clear Local Profiles</button>
+            <div class="actions" style="margin-top:12px">
+                <button id="btn-n8n-send" class="btn btn-primary">📤 Send Saved Profiles Now</button>
+                <button id="btn-clear" class="btn btn-danger">🗑️ Clear Local Data</button>
             </div>
+
         </div>
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.6.0 · 🤖 Auto-Pull · Minimal</p>
+        <p>LinkedIn Recruiter Intelligence v0.6.1 · 🤖 Auto-Pull · Friendly UI</p>
     </footer>
 
     <script src="popup.js"></script>
