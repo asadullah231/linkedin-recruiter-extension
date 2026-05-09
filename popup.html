@@ -82,18 +82,17 @@
             <!-- STEP 1: SETUP                                  -->
             <!-- ────────────────────────────────────────────── -->
             <h3>⚙️ Step 1 — Setup (one-time)</h3>
-            <p class="hint">Paste your n8n webhook URLs. Get them from your n8n workflows.</p>
+            <p class="hint">Connection to n8n is pre-configured. Just save settings to get started.</p>
 
-            <div class="input-group">
-                <label>📥 <strong>Pull URL</strong> <span class="badge-info">where I get URLs</span></label>
-                <input type="text" id="n8n-pull-url" placeholder="https://n8n.../webhook/pull-urls" />
-                <p class="hint-small">Extension calls this to fetch pending LinkedIn URLs from n8n.</p>
-            </div>
-
-            <div class="input-group">
-                <label>📤 <strong>Results URL</strong> <span class="badge-info">where I send scraped data</span></label>
-                <input type="text" id="n8n-callback-url" placeholder="https://n8n.../webhook/scrape-results" />
-                <p class="hint-small">Extension posts scraped profiles here when done. n8n then uploads CSV back to Slack.</p>
+            <div class="connection-info">
+                <div class="connection-row">
+                    <span class="connection-label">📥 Pull URL:</span>
+                    <code>n8n.emergeautomation.tech/webhook/pull-urls</code>
+                </div>
+                <div class="connection-row">
+                    <span class="connection-label">📤 Results URL:</span>
+                    <code>n8n.emergeautomation.tech/webhook/scrape-results</code>
+                </div>
             </div>
 
             <div class="input-group collapse-group">
@@ -245,7 +244,7 @@
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.12.0 · 🚫 Skip Closed Jobs</p>
+        <p>LinkedIn Recruiter Intelligence v0.13.0 · 🔌 Pre-Configured</p>
     </footer>
 
     <script src="popup.js"></script>

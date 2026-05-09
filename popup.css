@@ -644,6 +644,45 @@ main::-webkit-scrollbar-thumb,
     margin-bottom: 6px;
 }
 
+/* ─── Pre-configured connection info ─── */
+.connection-info {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+}
+
+.connection-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 12px;
+}
+
+.connection-row + .connection-row {
+    border-top: 1px dashed #d1fae5;
+    margin-top: 4px;
+    padding-top: 8px;
+}
+
+.connection-label {
+    font-weight: 600;
+    color: #166534;
+    min-width: 95px;
+}
+
+.connection-info code {
+    background: white;
+    padding: 3px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #14532d;
+    word-break: break-all;
+    flex: 1;
+}
+
 /* ═══════════════════════════════════════════════ */
 /* STATUS PILL (in header)                          */
 /* ═══════════════════════════════════════════════ */

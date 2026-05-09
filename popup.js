@@ -7,6 +7,10 @@
 let allProfiles = [];
 let pendingUrls = [];   // populated by Pull from n8n
 
+// Hardcoded n8n endpoints (no longer user-editable)
+const N8N_PULL_URL = 'https://n8n.emergeautomation.tech/webhook/pull-urls';
+const N8N_CALLBACK_URL = 'https://n8n.emergeautomation.tech/webhook/scrape-results';
+
 // ═══════════════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════════════
@@ -479,9 +483,8 @@ function csvEscape(v) {
 
 async function loadN8nSettings() {
     const { n8nSettings = {}, aiSettings = {} } = await chrome.storage.local.get(['n8nSettings', 'aiSettings']);
-    document.getElementById('n8n-pull-url').value = n8nSettings.pullUrl || '';
-    document.getElementById('n8n-callback-url').value = n8nSettings.callbackUrl || '';
-    document.getElementById('n8n-api-key').value = n8nSettings.apiKey || '';
+    const apiKeyEl = document.getElementById('n8n-api-key');
+    if (apiKeyEl) apiKeyEl.value = n8nSettings.apiKey || '';
     document.getElementById('n8n-auto-send').checked = !!n8nSettings.autoSend;
     const autoPullEl = document.getElementById('n8n-auto-pull');
     if (autoPullEl) autoPullEl.checked = !!n8nSettings.autoPull;
@@ -535,9 +538,9 @@ async function saveN8nSettings() {
     const autoPullEl = document.getElementById('n8n-auto-pull');
     const stopAfterEl = document.getElementById('n8n-stop-after-batch');
     const settings = {
-        pullUrl: document.getElementById('n8n-pull-url').value.trim(),
-        callbackUrl: document.getElementById('n8n-callback-url').value.trim(),
-        apiKey: document.getElementById('n8n-api-key').value.trim(),
+        pullUrl: N8N_PULL_URL,
+        callbackUrl: N8N_CALLBACK_URL,
+        apiKey: document.getElementById('n8n-api-key')?.value.trim() || '',
         autoSend: document.getElementById('n8n-auto-send').checked,
         autoPull: autoPullEl ? autoPullEl.checked : false,
         stopAfterBatch: stopAfterEl ? stopAfterEl.checked : false
@@ -564,9 +567,9 @@ async function saveN8nSettings() {
 
 function getN8nSettings() {
     return {
-        pullUrl: document.getElementById('n8n-pull-url').value.trim(),
-        callbackUrl: document.getElementById('n8n-callback-url').value.trim(),
-        apiKey: document.getElementById('n8n-api-key').value.trim()
+        pullUrl: N8N_PULL_URL,
+        callbackUrl: N8N_CALLBACK_URL,
+        apiKey: document.getElementById('n8n-api-key')?.value.trim() || ''
     };
 }
 

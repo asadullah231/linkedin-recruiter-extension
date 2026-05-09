@@ -1,0 +1,27 @@
+mindmap
+  root((LinkedIn<br/>Recruiter<br/>Intelligence))
+    Slack
+      Upload xlsx
+      Receive XLSX result
+    n8n
+      WF1 Slack to NocoDB
+      WF2 Pull pending URLs
+      WF3 Receive results to Slack
+    NocoDB
+      scrape_queue table
+      pending state
+      in_progress state
+      complete state
+    Extension
+      Auto-pull 30s
+      Stop after batch
+      Emergency stop
+      Hiring badge scraper
+      Activity post scanner
+      AI top-job ranking
+      Closed-job filter
+      XLSX builder SheetJS
+      Status pill + badge
+    APIs
+      LinkedIn session
+      OpenRouter Gemini

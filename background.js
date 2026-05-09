@@ -11,7 +11,7 @@
 // Load SheetJS for XLSX generation in service worker
 try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
 
-console.log('🟢 LRI Background v0.12.0 loaded');
+console.log('🟢 LRI Background v0.13.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -220,6 +220,12 @@ chrome.runtime.onStartup.addListener(async () => {
 
 chrome.runtime.onInstalled.addListener(async () => {
     const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+
+    // Always force the hardcoded URLs (in case user had stale ones)
+    n8nSettings.pullUrl = 'https://n8n.emergeautomation.tech/webhook/pull-urls';
+    n8nSettings.callbackUrl = 'https://n8n.emergeautomation.tech/webhook/scrape-results';
+    await chrome.storage.local.set({ n8nSettings });
+
     if (n8nSettings.autoPull) {
         chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
         console.log('🤖 Auto-pull armed after install/update');
