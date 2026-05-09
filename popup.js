@@ -482,31 +482,31 @@ function csvEscape(v) {
 // ═══════════════════════════════════════════════════════════════════════
 
 async function loadN8nSettings() {
-    // ── ENFORCE: Auto mode is always ON ──
-    // We persist these as fixed values regardless of any prior state,
-    // so background's auto-pull / auto-send / stop-after-batch always run.
-    const fixedN8nSettings = {
-        pullUrl: N8N_PULL_URL,
-        callbackUrl: N8N_CALLBACK_URL,
-        apiKey: '',
-        autoPull: true,
-        autoSend: true,
-        stopAfterBatch: true
-    };
-
     const stored = await chrome.storage.local.get(['n8nSettings', 'aiSettings']);
+    const n8nSettings = stored.n8nSettings || {};
     const aiSettings = stored.aiSettings || {};
 
-    // Preserve apiKey if user previously stored one (still optional)
-    if (stored.n8nSettings?.apiKey) fixedN8nSettings.apiKey = stored.n8nSettings.apiKey;
+    // n8n side — URLs + behaviour flags are fixed, only autoPull is user-controlled
+    const merged = {
+        pullUrl: N8N_PULL_URL,
+        callbackUrl: N8N_CALLBACK_URL,
+        apiKey: n8nSettings.apiKey || '',
+        autoPull: !!n8nSettings.autoPull,   // ← user toggle (default false)
+        autoSend: true,                      // always ON
+        stopAfterBatch: true                 // always ON
+    };
+    await chrome.storage.local.set({ n8nSettings: merged });
 
-    // Force-write the fixed settings so the alarm picks them up
-    await chrome.storage.local.set({ n8nSettings: fixedN8nSettings });
-    await chrome.runtime.sendMessage({ action: 'setAutoPull', enabled: true }).catch(() => {});
-
-    // Force-enable filterClosed on the AI side too
+    // Closed-jobs filter is always ON
     aiSettings.filterClosed = true;
     await chrome.storage.local.set({ aiSettings });
+
+    // ── Master toggle UI ──
+    const toggleEl = document.getElementById('auto-mode-toggle');
+    if (toggleEl) {
+        toggleEl.checked = merged.autoPull;
+        updateAutoModeBannerState(merged.autoPull);
+    }
 
     // AI settings UI (still user-editable in collapsed advanced section)
     const aiKeyEl = document.getElementById('ai-api-key');
@@ -517,7 +517,43 @@ async function loadN8nSettings() {
     if (aiEnabledEl) aiEnabledEl.checked = !!aiSettings.enabled;
 }
 
+function updateAutoModeBannerState(isOn) {
+    const banner = document.getElementById('auto-mode-banner');
+    const state = document.getElementById('auto-mode-state');
+    if (!banner || !state) return;
+
+    if (isOn) {
+        banner.classList.remove('paused');
+        banner.classList.add('running');
+        state.textContent = '🟢 Running — pulling every 30 seconds';
+    } else {
+        banner.classList.remove('running');
+        banner.classList.add('paused');
+        state.textContent = '⏸ Paused — flip the switch to start';
+    }
+}
+
+async function handleAutoModeToggle(e) {
+    const enabled = e.target.checked;
+
+    // Persist the choice
+    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+    n8nSettings.autoPull = enabled;
+    await chrome.storage.local.set({ n8nSettings });
+
+    // Tell background to start/stop the alarm
+    await chrome.runtime.sendMessage({ action: 'setAutoPull', enabled }).catch(() => {});
+
+    // Update UI
+    updateAutoModeBannerState(enabled);
+    n8nLog(enabled ? '🟢 Auto Mode ENABLED — extension will pull every 30s.' : '⏸ Auto Mode PAUSED.', enabled ? 'success' : 'info');
+    refreshStatusIndicator();
+}
+
 function setupN8nListeners() {
+    const toggleEl = document.getElementById('auto-mode-toggle');
+    if (toggleEl) toggleEl.addEventListener('change', handleAutoModeToggle);
+
     const saveBtn = document.getElementById('btn-n8n-save');
     if (saveBtn) saveBtn.addEventListener('click', saveN8nSettings);
 

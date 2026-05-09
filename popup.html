@@ -65,16 +65,23 @@
         <div class="bulk-section">
 
             <!-- ────────────────────────────────────────────── -->
-            <!-- AUTO MODE — ACTIVE STATUS                       -->
+            <!-- AUTO MODE — MASTER TOGGLE                       -->
             <!-- ────────────────────────────────────────────── -->
-            <div class="auto-mode-banner">
-                <div class="auto-mode-title">🤖 <strong>Auto Mode</strong> · Always On</div>
+            <div class="auto-mode-banner" id="auto-mode-banner">
+                <div class="auto-mode-header">
+                    <div class="auto-mode-title">🤖 <strong>Auto Mode</strong></div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="auto-mode-toggle" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
                 <div class="auto-mode-list">
                     ✅ Auto-pull every 30s &nbsp;·&nbsp;
                     ✅ Stop after batch &nbsp;·&nbsp;
                     ✅ Auto-send results &nbsp;·&nbsp;
                     ✅ Skip closed jobs
                 </div>
+                <div class="auto-mode-state" id="auto-mode-state">⏸ Paused — flip the switch to start</div>
                 <div class="auto-mode-action">
                     <button id="btn-n8n-test" class="btn btn-primary">🔌 Test Connection</button>
                 </div>
@@ -175,7 +182,7 @@
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.14.0 · 🤖 Auto-Mode Fixed</p>
+        <p>LinkedIn Recruiter Intelligence v0.15.0 · 🔘 Master Toggle</p>
     </footer>
 
     <script src="popup.js"></script>

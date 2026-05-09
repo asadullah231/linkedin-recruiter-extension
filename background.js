@@ -11,7 +11,7 @@
 // Load SheetJS for XLSX generation in service worker
 try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
 
-console.log('🟢 LRI Background v0.14.0 loaded');
+console.log('🟢 LRI Background v0.15.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -209,29 +209,38 @@ function extractUrls(data) {
     return urls;
 }
 
-// Re-arm alarm on service worker startup (always — auto mode is fixed ON)
+// Re-arm alarm on service worker startup — only if user has Auto Mode ON
 chrome.runtime.onStartup.addListener(async () => {
-    chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
-    console.log('🤖 Auto-pull re-armed on startup (always ON)');
+    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+    if (n8nSettings.autoPull) {
+        chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
+        console.log('🤖 Auto-pull re-armed on startup');
+    } else {
+        console.log('⏸ Auto-pull paused on startup (user OFF)');
+    }
 });
 
 chrome.runtime.onInstalled.addListener(async () => {
     const { n8nSettings = {}, aiSettings = {} } = await chrome.storage.local.get(['n8nSettings', 'aiSettings']);
 
-    // Force-fix the n8n side — auto mode is always ON
+    // Force-fix URLs + behaviour flags. autoPull stays user-controlled.
     n8nSettings.pullUrl = 'https://n8n.emergeautomation.tech/webhook/pull-urls';
     n8nSettings.callbackUrl = 'https://n8n.emergeautomation.tech/webhook/scrape-results';
-    n8nSettings.autoPull = true;
     n8nSettings.autoSend = true;
     n8nSettings.stopAfterBatch = true;
+    if (typeof n8nSettings.autoPull === 'undefined') n8nSettings.autoPull = false;  // default OFF on first install
     await chrome.storage.local.set({ n8nSettings });
 
-    // Force closed-jobs filter ON (ai-side flag, doesn't require API key)
     aiSettings.filterClosed = true;
     await chrome.storage.local.set({ aiSettings });
 
-    chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
-    console.log('🤖 Auto-pull armed (always ON) after install/update');
+    if (n8nSettings.autoPull) {
+        chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
+        console.log('🤖 Auto-pull re-armed (user had it ON)');
+    } else {
+        chrome.alarms.clear('auto-pull');
+        console.log('⏸ Auto-pull paused (default / user OFF)');
+    }
 });
 
 // ═══════════════════════════════════════════════════════════════════════
