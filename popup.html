@@ -110,6 +110,37 @@
             <hr class="divider">
 
             <!-- ────────────────────────────────────────────── -->
+            <!-- AI RANKING (OpenRouter)                        -->
+            <!-- ────────────────────────────────────────────── -->
+            <h3>🤖 AI Top-Job Ranking <span class="badge-optional">optional</span></h3>
+            <p class="hint">Use AI to pick the most senior role from each recruiter's hiring posts. Sends data to OpenRouter (~$0.001/profile).</p>
+
+            <div class="input-group">
+                <label>🔑 OpenRouter API Key:</label>
+                <input type="password" id="ai-api-key" placeholder="sk-or-v1-..." />
+                <p class="hint-small">Get one at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a> — stored locally only.</p>
+            </div>
+
+            <div class="input-group">
+                <label>🧠 Model:</label>
+                <select id="ai-model" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px; font-size:12px">
+                    <option value="google/gemini-flash-1.5">Gemini Flash 1.5 (fastest, cheapest) ⭐</option>
+                    <option value="openai/gpt-4o-mini">GPT-4o-mini (balanced)</option>
+                    <option value="anthropic/claude-3-haiku">Claude Haiku (accurate)</option>
+                </select>
+            </div>
+
+            <div class="settings-row">
+                <label>
+                    <input type="checkbox" id="ai-enabled" />
+                    🤖 <strong>Enable AI ranking</strong>
+                    <br><small>After scraping, AI picks the most senior job per profile and tags it. Adds 'isTopJob' field to each hiring post.</small>
+                </label>
+            </div>
+
+            <hr class="divider">
+
+            <!-- ────────────────────────────────────────────── -->
             <!-- STEP 2: AUTOMATION MODE                        -->
             <!-- ────────────────────────────────────────────── -->
             <h3>🤖 Step 2 — Pick a Mode</h3>
@@ -206,7 +237,7 @@
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.9.0 · 📰 Activity Posts Scan</p>
+        <p>LinkedIn Recruiter Intelligence v0.10.0 · 🤖 AI Top-Job</p>
     </footer>
 
     <script src="popup.js"></script>

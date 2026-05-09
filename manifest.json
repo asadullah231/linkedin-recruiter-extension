@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Recruiter Intelligence",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "n8n-driven LinkedIn recruiter scraper. Auto-pulls URLs from your n8n workflow, scrapes profiles + hiring posts, posts results back automatically.",
 
   "permissions": [
@@ -17,7 +17,8 @@
     "https://www.linkedin.com/*",
     "https://linkedin.com/*",
     "https://n8n.emergeautomation.tech/*",
-    "https://*.n8n.cloud/*"
+    "https://*.n8n.cloud/*",
+    "https://openrouter.ai/*"
   ],
 
   "background": {

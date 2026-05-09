@@ -358,7 +358,8 @@ function buildJobsCsv(profiles) {
         'Job Title',
         'Job Location',
         'Source',
-        'Post URL'
+        'Post URL',
+        'Is Top Job'
     ];
 
     const rows = [headers.map(csvEscape).join(',')];
@@ -381,7 +382,8 @@ function buildJobsCsv(profiles) {
                 job.title || '',
                 job.location || '',
                 job.source || 'hiring_badge',
-                job.postUrl || ''
+                job.postUrl || '',
+                job.isTopJob ? 'TRUE' : ''
             ];
             rows.push(row.map(csvEscape).join(','));
         }
@@ -476,7 +478,7 @@ function csvEscape(v) {
 // ═══════════════════════════════════════════════════════════════════════
 
 async function loadN8nSettings() {
-    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+    const { n8nSettings = {}, aiSettings = {} } = await chrome.storage.local.get(['n8nSettings', 'aiSettings']);
     document.getElementById('n8n-pull-url').value = n8nSettings.pullUrl || '';
     document.getElementById('n8n-callback-url').value = n8nSettings.callbackUrl || '';
     document.getElementById('n8n-api-key').value = n8nSettings.apiKey || '';
@@ -485,6 +487,14 @@ async function loadN8nSettings() {
     if (autoPullEl) autoPullEl.checked = !!n8nSettings.autoPull;
     const stopAfterEl = document.getElementById('n8n-stop-after-batch');
     if (stopAfterEl) stopAfterEl.checked = !!n8nSettings.stopAfterBatch;
+
+    // AI settings
+    const aiKeyEl = document.getElementById('ai-api-key');
+    const aiModelEl = document.getElementById('ai-model');
+    const aiEnabledEl = document.getElementById('ai-enabled');
+    if (aiKeyEl) aiKeyEl.value = aiSettings.apiKey || '';
+    if (aiModelEl) aiModelEl.value = aiSettings.model || 'google/gemini-flash-1.5';
+    if (aiEnabledEl) aiEnabledEl.checked = !!aiSettings.enabled;
 }
 
 function setupN8nListeners() {
@@ -529,6 +539,14 @@ async function saveN8nSettings() {
         stopAfterBatch: stopAfterEl ? stopAfterEl.checked : false
     };
     await chrome.storage.local.set({ n8nSettings: settings });
+
+    // Save AI settings separately
+    const aiSettings = {
+        apiKey: document.getElementById('ai-api-key')?.value.trim() || '',
+        model: document.getElementById('ai-model')?.value || 'google/gemini-flash-1.5',
+        enabled: document.getElementById('ai-enabled')?.checked || false
+    };
+    await chrome.storage.local.set({ aiSettings });
 
     // Tell background to start/stop auto-pull alarm
     await chrome.runtime.sendMessage({

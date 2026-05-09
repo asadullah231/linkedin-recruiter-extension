@@ -342,6 +342,18 @@ async function runBulkQueue() {
         });
     } catch {}
 
+    // ── AI top-job ranking (before n8n send) ──
+    try {
+        const { aiSettings = {} } = await chrome.storage.local.get('aiSettings');
+        if (aiSettings.enabled && aiSettings.apiKey) {
+            bulkLog('🤖 AI ranking top jobs per profile...', 'info');
+            await rankTopJobsWithAI(aiSettings);
+            bulkLog('✅ AI ranking complete.', 'success');
+        }
+    } catch (err) {
+        bulkLog(`⚠️ AI ranking error: ${err.message}`, 'error');
+    }
+
     // ── n8n auto-callback ──
     try {
         const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
@@ -360,6 +372,122 @@ async function runBulkQueue() {
     } catch (err) {
         bulkLog(`⚠️ n8n callback error: ${err.message}`, 'error');
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// AI TOP-JOB RANKING via OpenRouter
+// Picks the most senior role per recruiter and tags it isTopJob: true
+// ═══════════════════════════════════════════════════════════════════════
+
+async function rankTopJobsWithAI(aiSettings) {
+    const profiles = await getAllProfiles();
+    const candidates = profiles.filter(p => (p.hiringPosts || []).length > 1);
+
+    if (candidates.length === 0) {
+        bulkLog('🤖 No profiles with 2+ jobs — skipping AI ranking.', 'info');
+        // Still mark single-job profiles' only job as top
+        for (const p of profiles) {
+            if ((p.hiringPosts || []).length === 1) {
+                p.hiringPosts[0].isTopJob = true;
+                p.topJob = p.hiringPosts[0];
+                await saveProfile(p);
+            }
+        }
+        return;
+    }
+
+    bulkLog(`🤖 Ranking ${candidates.length} profiles with AI (model: ${aiSettings.model})...`, 'info');
+
+    let success = 0;
+    let failed = 0;
+
+    for (const profile of candidates) {
+        try {
+            const titles = profile.hiringPosts.map((j, i) => `${i}. ${j.title || 'Untitled'}`);
+            const topIdx = await callOpenRouterForTopJob(aiSettings, titles);
+
+            // Tag jobs
+            profile.hiringPosts.forEach((j, i) => { j.isTopJob = (i === topIdx); });
+            profile.topJob = profile.hiringPosts[topIdx] || profile.hiringPosts[0];
+
+            await saveProfile(profile);
+            success++;
+        } catch (err) {
+            failed++;
+            console.warn(`AI rank failed for ${profile.fullName}:`, err.message);
+            // Fallback: mark first job as top
+            if (profile.hiringPosts[0]) {
+                profile.hiringPosts[0].isTopJob = true;
+                profile.topJob = profile.hiringPosts[0];
+                await saveProfile(profile);
+            }
+        }
+
+        // Small delay between API calls (rate-limit polite)
+        await sleep(150);
+    }
+
+    // Single-job profiles → automatically top
+    for (const p of profiles) {
+        if ((p.hiringPosts || []).length === 1 && !p.hiringPosts[0].isTopJob) {
+            p.hiringPosts[0].isTopJob = true;
+            p.topJob = p.hiringPosts[0];
+            await saveProfile(p);
+        }
+    }
+
+    bulkLog(`🤖 AI ranking: ${success} succeeded, ${failed} failed`, 'success');
+}
+
+async function callOpenRouterForTopJob(aiSettings, titles) {
+    const systemPrompt = "You are a hiring intelligence analyst. Given a list of job titles, return ONLY the 0-based index of the MOST SENIOR role. Seniority order: C-level/Executive > VP > Director > Senior Manager > Manager > Senior IC > Mid > Junior > Intern. Respond with valid JSON only: {\"topIndex\": N, \"reasoning\": \"brief\"}";
+
+    const userMsg = `Job titles:\n${titles.join('\n')}\n\nReturn JSON.`;
+
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${aiSettings.apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://github.com/asadullah231/linkedin-recruiter-extension',
+            'X-Title': 'LinkedIn Recruiter Intelligence'
+        },
+        body: JSON.stringify({
+            model: aiSettings.model || 'google/gemini-flash-1.5',
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userMsg }
+            ],
+            response_format: { type: 'json_object' },
+            max_tokens: 100,
+            temperature: 0
+        })
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`OpenRouter HTTP ${res.status}: ${errText.substring(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) throw new Error('No content in AI response');
+
+    let parsed;
+    try {
+        // Try direct parse
+        parsed = JSON.parse(content);
+    } catch {
+        // Try extracting JSON from markdown code block
+        const m = content.match(/\{[^}]+\}/s);
+        if (m) parsed = JSON.parse(m[0]);
+    }
+
+    const idx = parsed?.topIndex;
+    if (typeof idx !== 'number' || idx < 0 || idx >= titles.length) {
+        throw new Error(`Invalid topIndex: ${idx}`);
+    }
+    return idx;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
