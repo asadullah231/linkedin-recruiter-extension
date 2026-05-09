@@ -65,60 +65,28 @@
         <div class="bulk-section">
 
             <!-- ────────────────────────────────────────────── -->
-            <!-- STEP 1: AUTOMATION MODE                        -->
+            <!-- AUTO MODE — ACTIVE STATUS                       -->
             <!-- ────────────────────────────────────────────── -->
-            <h3>🤖 Step 1 — Pick a Mode</h3>
-            <p class="hint">Choose how the extension should run, then save.</p>
-
-            <div class="settings-row">
-                <label>
-                    <input type="checkbox" id="filter-closed-jobs" />
-                    🚫 <strong>Skip closed jobs</strong>
-                    <br><small>After scraping, extension visits each job URL briefly. Jobs showing "No longer accepting applications" are removed. Adds ~1s per job but ensures live results only.</small>
-                </label>
-            </div>
-
-            <div class="mode-card">
-                <label class="mode-label">
-                    <input type="checkbox" id="n8n-auto-pull" />
-                    <span class="mode-title">🤖 Fully Automatic <span class="badge-recommended">recommended</span></span>
-                </label>
-                <p class="mode-desc">
-                    Extension auto-checks n8n every <strong>30 seconds</strong> for new URLs and scrapes them — even when popup is closed.
-                    Just keep Chrome open. <em>Zero clicks needed after setup.</em>
-                </p>
-                <label class="mode-label" style="margin-top:8px; padding-top:8px; border-top:1px dashed #e5e7eb">
-                    <input type="checkbox" id="n8n-stop-after-batch" />
-                    <span style="font-size:12px">⏹ <strong>Stop after current batch finishes</strong></span>
-                </label>
-                <p class="mode-desc">
-                    When ON, auto-pull turns OFF automatically once the current scrape batch completes. Prevents endless looping.
-                </p>
-            </div>
-
-            <div class="mode-card">
-                <label class="mode-label">
-                    <input type="checkbox" id="n8n-auto-send" />
-                    <span class="mode-title">📤 Auto-send results when done</span>
-                </label>
-                <p class="mode-desc">
-                    After each scrape finishes, results are POSTed to n8n automatically.
-                    <strong>Keep this ON</strong> — otherwise CSV won't reach Slack.
-                </p>
-            </div>
-
-            <div class="actions">
-                <button id="btn-n8n-save" class="btn btn-primary">💾 Save Settings</button>
-                <button id="btn-n8n-test" class="btn btn-primary">🔌 Test Connection</button>
+            <div class="auto-mode-banner">
+                <div class="auto-mode-title">🤖 <strong>Auto Mode</strong> · Always On</div>
+                <div class="auto-mode-list">
+                    ✅ Auto-pull every 30s &nbsp;·&nbsp;
+                    ✅ Stop after batch &nbsp;·&nbsp;
+                    ✅ Auto-send results &nbsp;·&nbsp;
+                    ✅ Skip closed jobs
+                </div>
+                <div class="auto-mode-action">
+                    <button id="btn-n8n-test" class="btn btn-primary">🔌 Test Connection</button>
+                </div>
             </div>
 
             <hr class="divider">
 
             <!-- ────────────────────────────────────────────── -->
-            <!-- STEP 2: MANUAL CONTROL                         -->
+            <!-- MANUAL CONTROL                                 -->
             <!-- ────────────────────────────────────────────── -->
-            <h3>🎮 Step 2 — Manual Run <span class="badge-optional">if not using auto-pull</span></h3>
-            <p class="hint">Click <strong>Pull URLs</strong>, then <strong>Start Scrape</strong>. Results auto-upload to Slack.</p>
+            <h3>🎮 Manual Run <span class="badge-optional">optional</span></h3>
+            <p class="hint">Trigger a scrape on demand. Results still auto-upload to Slack.</p>
 
             <div class="settings-row">
                 <label>⏱️ Delay between profiles:</label>
@@ -207,7 +175,7 @@
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.13.2 · 🪶 Minimal UI</p>
+        <p>LinkedIn Recruiter Intelligence v0.14.0 · 🤖 Auto-Mode Fixed</p>
     </footer>
 
     <script src="popup.js"></script>

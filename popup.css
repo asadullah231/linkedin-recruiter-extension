@@ -718,6 +718,36 @@ main::-webkit-scrollbar-thumb,
     border-color: #fcd34d;
 }
 
+/* ─── Auto Mode Banner (replaces toggle cards) ─── */
+.auto-mode-banner {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border: 1px solid #6ee7b7;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+}
+
+.auto-mode-title {
+    font-size: 14px;
+    color: #065f46;
+    margin-bottom: 6px;
+}
+
+.auto-mode-list {
+    font-size: 12px;
+    color: #047857;
+    line-height: 1.7;
+    margin-bottom: 10px;
+}
+
+.auto-mode-action {
+    display: flex;
+}
+
+.auto-mode-action .btn {
+    flex: 1;
+}
+
 /* ═══════════════════════════════════════════════ */
 /* STATUS PILL (in header)                          */
 /* ═══════════════════════════════════════════════ */

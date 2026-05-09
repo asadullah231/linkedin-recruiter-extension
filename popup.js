@@ -482,87 +482,84 @@ function csvEscape(v) {
 // ═══════════════════════════════════════════════════════════════════════
 
 async function loadN8nSettings() {
-    const { n8nSettings = {}, aiSettings = {} } = await chrome.storage.local.get(['n8nSettings', 'aiSettings']);
-    const apiKeyEl = document.getElementById('n8n-api-key');
-    if (apiKeyEl) apiKeyEl.value = n8nSettings.apiKey || '';
-    document.getElementById('n8n-auto-send').checked = !!n8nSettings.autoSend;
-    const autoPullEl = document.getElementById('n8n-auto-pull');
-    if (autoPullEl) autoPullEl.checked = !!n8nSettings.autoPull;
-    const stopAfterEl = document.getElementById('n8n-stop-after-batch');
-    if (stopAfterEl) stopAfterEl.checked = !!n8nSettings.stopAfterBatch;
+    // ── ENFORCE: Auto mode is always ON ──
+    // We persist these as fixed values regardless of any prior state,
+    // so background's auto-pull / auto-send / stop-after-batch always run.
+    const fixedN8nSettings = {
+        pullUrl: N8N_PULL_URL,
+        callbackUrl: N8N_CALLBACK_URL,
+        apiKey: '',
+        autoPull: true,
+        autoSend: true,
+        stopAfterBatch: true
+    };
 
-    // AI settings
+    const stored = await chrome.storage.local.get(['n8nSettings', 'aiSettings']);
+    const aiSettings = stored.aiSettings || {};
+
+    // Preserve apiKey if user previously stored one (still optional)
+    if (stored.n8nSettings?.apiKey) fixedN8nSettings.apiKey = stored.n8nSettings.apiKey;
+
+    // Force-write the fixed settings so the alarm picks them up
+    await chrome.storage.local.set({ n8nSettings: fixedN8nSettings });
+    await chrome.runtime.sendMessage({ action: 'setAutoPull', enabled: true }).catch(() => {});
+
+    // Force-enable filterClosed on the AI side too
+    aiSettings.filterClosed = true;
+    await chrome.storage.local.set({ aiSettings });
+
+    // AI settings UI (still user-editable in collapsed advanced section)
     const aiKeyEl = document.getElementById('ai-api-key');
     const aiModelEl = document.getElementById('ai-model');
     const aiEnabledEl = document.getElementById('ai-enabled');
     if (aiKeyEl) aiKeyEl.value = aiSettings.apiKey || '';
     if (aiModelEl) aiModelEl.value = aiSettings.model || 'google/gemini-flash-1.5';
     if (aiEnabledEl) aiEnabledEl.checked = !!aiSettings.enabled;
-
-    // Filter closed jobs setting
-    const filterClosedEl = document.getElementById('filter-closed-jobs');
-    if (filterClosedEl) filterClosedEl.checked = !!aiSettings.filterClosed;
 }
 
 function setupN8nListeners() {
-    document.getElementById('btn-n8n-save').addEventListener('click', saveN8nSettings);
-    document.getElementById('btn-n8n-pull').addEventListener('click', pullFromN8n);
-    document.getElementById('btn-n8n-send').addEventListener('click', sendToN8n);
-    document.getElementById('btn-n8n-test').addEventListener('click', testN8nConnection);
+    const saveBtn = document.getElementById('btn-n8n-save');
+    if (saveBtn) saveBtn.addEventListener('click', saveN8nSettings);
+
+    const pullBtn = document.getElementById('btn-n8n-pull');
+    if (pullBtn) pullBtn.addEventListener('click', pullFromN8n);
+
+    const sendBtn = document.getElementById('btn-n8n-send');
+    if (sendBtn) sendBtn.addEventListener('click', sendToN8n);
+
+    const testBtn = document.getElementById('btn-n8n-test');
+    if (testBtn) testBtn.addEventListener('click', testN8nConnection);
 
     const emergencyBtn = document.getElementById('btn-emergency-stop');
-    if (emergencyBtn) {
-        emergencyBtn.addEventListener('click', emergencyStop);
+    if (emergencyBtn) emergencyBtn.addEventListener('click', emergencyStop);
+
+    // Save AI section automatically when its inputs change (since the dedicated Save button is gone)
+    const aiInputs = ['ai-api-key', 'ai-model', 'ai-enabled'];
+    for (const id of aiInputs) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', saveN8nSettings);
     }
 }
 
 async function emergencyStop() {
-    // 1. Stop the bulk scrape
+    // Auto-mode is fixed ON, so we only halt the in-progress scrape.
+    // Auto-pull will resume on the next alarm tick (30s later).
     await chrome.runtime.sendMessage({ action: 'stopBulk' }).catch(() => {});
-
-    // 2. Disable auto-pull
-    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
-    n8nSettings.autoPull = false;
-    await chrome.storage.local.set({ n8nSettings });
-    await chrome.runtime.sendMessage({ action: 'setAutoPull', enabled: false }).catch(() => {});
-
-    // 3. Update UI
-    const autoPullEl = document.getElementById('n8n-auto-pull');
-    if (autoPullEl) autoPullEl.checked = false;
-
-    n8nLog('🛑 EMERGENCY STOP — scrape halted, auto-pull disabled.', 'error');
+    n8nLog('🛑 EMERGENCY STOP — current scrape halted. Auto-pull will resume in 30s.', 'error');
     refreshStatusIndicator();
 }
 
 async function saveN8nSettings() {
-    const autoPullEl = document.getElementById('n8n-auto-pull');
-    const stopAfterEl = document.getElementById('n8n-stop-after-batch');
-    const settings = {
-        pullUrl: N8N_PULL_URL,
-        callbackUrl: N8N_CALLBACK_URL,
-        apiKey: document.getElementById('n8n-api-key')?.value.trim() || '',
-        autoSend: document.getElementById('n8n-auto-send').checked,
-        autoPull: autoPullEl ? autoPullEl.checked : false,
-        stopAfterBatch: stopAfterEl ? stopAfterEl.checked : false
-    };
-    await chrome.storage.local.set({ n8nSettings: settings });
-
-    // Save AI settings separately
+    // n8n side is fixed (auto-pull / auto-send / stop-after-batch always ON).
+    // Only AI section is user-editable now.
     const aiSettings = {
         apiKey: document.getElementById('ai-api-key')?.value.trim() || '',
         model: document.getElementById('ai-model')?.value || 'google/gemini-flash-1.5',
         enabled: document.getElementById('ai-enabled')?.checked || false,
-        filterClosed: document.getElementById('filter-closed-jobs')?.checked || false
+        filterClosed: true
     };
     await chrome.storage.local.set({ aiSettings });
-
-    // Tell background to start/stop auto-pull alarm
-    await chrome.runtime.sendMessage({
-        action: 'setAutoPull',
-        enabled: settings.autoPull
-    }).catch(() => {});
-
-    n8nLog(`💾 Settings saved.${settings.autoPull ? ' 🤖 Auto-pull ENABLED.' : ''}${settings.stopAfterBatch ? ' ⏹ Stop-after-batch ON.' : ''}`, 'success');
+    n8nLog(`💾 AI settings saved.${aiSettings.enabled ? ' 🤖 AI ranking ENABLED.' : ''}`, 'success');
 }
 
 function getN8nSettings() {

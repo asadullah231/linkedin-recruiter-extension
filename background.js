@@ -11,7 +11,7 @@
 // Load SheetJS for XLSX generation in service worker
 try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
 
-console.log('🟢 LRI Background v0.13.0 loaded');
+console.log('🟢 LRI Background v0.14.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -209,27 +209,29 @@ function extractUrls(data) {
     return urls;
 }
 
-// Re-arm alarm on service worker startup
+// Re-arm alarm on service worker startup (always — auto mode is fixed ON)
 chrome.runtime.onStartup.addListener(async () => {
-    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
-    if (n8nSettings.autoPull) {
-        chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
-        console.log('🤖 Auto-pull re-armed on startup');
-    }
+    chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
+    console.log('🤖 Auto-pull re-armed on startup (always ON)');
 });
 
 chrome.runtime.onInstalled.addListener(async () => {
-    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+    const { n8nSettings = {}, aiSettings = {} } = await chrome.storage.local.get(['n8nSettings', 'aiSettings']);
 
-    // Always force the hardcoded URLs (in case user had stale ones)
+    // Force-fix the n8n side — auto mode is always ON
     n8nSettings.pullUrl = 'https://n8n.emergeautomation.tech/webhook/pull-urls';
     n8nSettings.callbackUrl = 'https://n8n.emergeautomation.tech/webhook/scrape-results';
+    n8nSettings.autoPull = true;
+    n8nSettings.autoSend = true;
+    n8nSettings.stopAfterBatch = true;
     await chrome.storage.local.set({ n8nSettings });
 
-    if (n8nSettings.autoPull) {
-        chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
-        console.log('🤖 Auto-pull armed after install/update');
-    }
+    // Force closed-jobs filter ON (ai-side flag, doesn't require API key)
+    aiSettings.filterClosed = true;
+    await chrome.storage.local.set({ aiSettings });
+
+    chrome.alarms.create('auto-pull', { periodInMinutes: 0.5 });
+    console.log('🤖 Auto-pull armed (always ON) after install/update');
 });
 
 // ═══════════════════════════════════════════════════════════════════════
