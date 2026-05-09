@@ -568,12 +568,109 @@ async function extractHiringPosts(voyagerData) {
                     company: card?.querySelector('[class*="company"]')?.innerText?.trim() || null,
                     location: card?.querySelector('[class*="location"]')?.innerText?.trim() || null,
                     postedAt: card?.querySelector('time, [class*="date"]')?.innerText?.trim() || null,
-                    jobUrl: `https://www.linkedin.com/jobs/view/${jobId}`
+                    jobUrl: `https://www.linkedin.com/jobs/view/${jobId}`,
+                    source: 'inline'
                 });
             }
         }
     }
 
+    // Tag the existing posts with source if not already
+    for (const p of posts) {
+        if (!p.source) p.source = 'hiring_badge';
+    }
+
+    // Method 4: Recent activity posts (last 15) — looks for jobs in recent posts/reposts
+    try {
+        const activityJobs = await extractFromActivityPosts();
+        if (activityJobs.length > 0) {
+            const existingIds = new Set(posts.map(p => p.jobId));
+            const newJobs = activityJobs.filter(j => !existingIds.has(j.jobId));
+            posts.push(...newJobs);
+            console.log(`🟢 LRI: Added ${newJobs.length} jobs from activity posts (after dedup)`);
+        }
+    } catch (err) {
+        console.warn('⚠️ LRI: Activity posts scan failed:', err.message);
+    }
+
+    return posts;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// METHOD 4: Activity / Recent Posts scan
+// Looks at recruiter's last 15 posts/activity items for job links
+// ═══════════════════════════════════════════════════════════════════════
+
+async function extractFromActivityPosts() {
+    const posts = [];
+    const seen = new Set();
+    const MAX_POSTS_TO_SCAN = 15;
+
+    console.log('🟢 LRI: Scanning Activity / Recent Posts...');
+
+    // Find the Activity section — multiple heuristics
+    const allSections = qq('section, div[class*="activity"], div[class*="feed"]');
+    let activitySection = null;
+
+    for (const sec of allSections) {
+        const heading = sec.querySelector('h2, h3, [class*="header"], [class*="title"]');
+        const headingText = (heading?.innerText || sec.innerText || '').trim().toLowerCase();
+        if (/^activity$|^posts$|^recent activity|^featured/i.test(headingText.substring(0, 50))) {
+            activitySection = sec;
+            break;
+        }
+    }
+
+    // Fallback: find any container that has multiple post-like children
+    if (!activitySection) {
+        const containers = qq('[class*="profile-creator"], [class*="activity-feed"], [class*="recent-activity"]');
+        if (containers.length > 0) activitySection = containers[0];
+    }
+
+    if (!activitySection) {
+        console.log('🟢 LRI: No activity section found');
+        return posts;
+    }
+
+    // Scan post-like children for job links
+    const postElements = activitySection.querySelectorAll(
+        'li, article, div[class*="feed-shared"], div[class*="update-components"], div[class*="post"]'
+    );
+
+    let scannedCount = 0;
+    for (const post of postElements) {
+        if (scannedCount >= MAX_POSTS_TO_SCAN) break;
+        scannedCount++;
+
+        const jobLinks = post.querySelectorAll('a[href*="/jobs/view/"]');
+        if (jobLinks.length === 0) continue;
+
+        for (const link of jobLinks) {
+            const idMatch = link.href.match(/\/jobs\/view\/(\d+)/);
+            const jobId = idMatch?.[1];
+            if (!jobId || seen.has(jobId)) continue;
+            seen.add(jobId);
+
+            const title = (link.innerText?.trim()
+                       || post.querySelector('h2, h3, h4, [class*="title"]')?.innerText?.trim()
+                       || 'Untitled job').replace(/\s+/g, ' ').trim().substring(0, 250);
+
+            const postLinkEl = post.querySelector('a[href*="/posts/"], a[href*="/feed/update"]');
+
+            posts.push({
+                jobId,
+                title,
+                company: post.querySelector('[class*="company"], [class*="actor-name"]')?.innerText?.trim() || null,
+                location: null,
+                postedAt: post.querySelector('time, [class*="date"], [class*="time-since"]')?.innerText?.trim() || null,
+                jobUrl: `https://www.linkedin.com/jobs/view/${jobId}`,
+                postUrl: postLinkEl?.href || null,
+                source: 'activity_post'
+            });
+        }
+    }
+
+    console.log(`🟢 LRI: Activity scan: scanned ${scannedCount} posts, found ${posts.length} job links`);
     return posts;
 }
 

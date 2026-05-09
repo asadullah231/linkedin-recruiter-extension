@@ -356,7 +356,9 @@ function buildJobsCsv(profiles) {
         'Last Name',
         'Job Poster Profile URL',
         'Job Title',
-        'Job Location'
+        'Job Location',
+        'Source',
+        'Post URL'
     ];
 
     const rows = [headers.map(csvEscape).join(',')];
@@ -377,7 +379,9 @@ function buildJobsCsv(profiles) {
                 profile.lastName || '',
                 profile.profileUrl || '',
                 job.title || '',
-                job.location || ''
+                job.location || '',
+                job.source || 'hiring_badge',
+                job.postUrl || ''
             ];
             rows.push(row.map(csvEscape).join(','));
         }
