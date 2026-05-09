@@ -8,7 +8,10 @@
  *  - Progress tracking + notifications to popup
  */
 
-console.log('🟢 LRI Background v0.6.0 loaded');
+// Load SheetJS for XLSX generation in service worker
+try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
+
+console.log('🟢 LRI Background v0.11.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -496,33 +499,117 @@ async function callOpenRouterForTopJob(aiSettings, titles) {
 
 async function sendBulkResultsToN8n(settings, savedCount, skippedCount) {
     const profiles = await getAllProfiles();
-    const headers = { 'Content-Type': 'application/json' };
-    if (settings.apiKey) headers['Authorization'] = `Bearer ${settings.apiKey}`;
 
-    const payload = {
+    // Build XLSX binary using SheetJS
+    let xlsxBlob = null;
+    try {
+        if (typeof XLSX === 'undefined') throw new Error('XLSX library not loaded');
+        xlsxBlob = buildXlsxBlob(profiles);
+        bulkLog(`📊 Built XLSX (${(xlsxBlob.size / 1024).toFixed(1)} KB)`, 'info');
+    } catch (err) {
+        bulkLog(`⚠️ XLSX build failed: ${err.message}. Falling back to JSON.`, 'error');
+    }
+
+    const profileUrls = profiles.map(p => p.profileUrl).filter(Boolean);
+    const meta = {
         source: 'linkedin-recruiter-extension',
-        version: '0.3.0',
+        version: '0.11.0',
         timestamp: new Date().toISOString(),
-        run: {
-            saved: savedCount,
-            skipped: skippedCount,
-            total: bulkState.totalUrls
-        },
-        profiles
+        saved: savedCount,
+        skipped: skippedCount,
+        total: bulkState.totalUrls,
+        profileUrls
     };
 
     bulkLog(`📤 Auto-sending results to n8n: ${settings.callbackUrl}`, 'info');
-    const res = await fetch(settings.callbackUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload)
-    });
+
+    let res;
+    if (xlsxBlob) {
+        // Multipart upload: file + meta JSON
+        const formData = new FormData();
+        formData.append('file', xlsxBlob, `jobs-${Date.now()}.xlsx`);
+        formData.append('meta', JSON.stringify(meta));
+        formData.append('profiles', JSON.stringify(profiles));
+
+        const headers = {};
+        if (settings.apiKey) headers['Authorization'] = `Bearer ${settings.apiKey}`;
+
+        res = await fetch(settings.callbackUrl, {
+            method: 'POST',
+            headers,
+            body: formData
+        });
+    } else {
+        // Fallback: JSON only (no XLSX)
+        const headers = { 'Content-Type': 'application/json' };
+        if (settings.apiKey) headers['Authorization'] = `Bearer ${settings.apiKey}`;
+        res = await fetch(settings.callbackUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ ...meta, run: { saved: savedCount, skipped: skippedCount, total: bulkState.totalUrls }, profiles })
+        });
+    }
 
     if (res.ok) {
         bulkLog(`✅ n8n callback OK (HTTP ${res.status})`, 'success');
     } else {
         bulkLog(`⚠️ n8n callback HTTP ${res.status}`, 'error');
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// XLSX BUILDER (uses SheetJS)
+// ═══════════════════════════════════════════════════════════════════════
+
+function buildXlsxBlob(profiles) {
+    // Build flat rows: 1 row per (profile × job)
+    const rows = [];
+    for (const p of profiles) {
+        const posts = p.hiringPosts || [];
+        if (posts.length === 0) continue;
+
+        for (const j of posts) {
+            rows.push({
+                'Profile URL':   p.profileUrl || '',
+                'Full Name':     p.fullName || '',
+                'First Name':    p.firstName || '',
+                'Last Name':     p.lastName || '',
+                'Job Title':     j.title || '',
+                'Job URL':       j.jobUrl || '',
+                'Job Location':  j.location || '',
+                'Company':       j.companyName || j.company || p.currentCompany || '',
+                'Headline':      p.headline || '',
+                'Source':        j.source || 'hiring_badge',
+                'Post URL':      j.postUrl || '',
+                'Is Top Job':    j.isTopJob ? 'TRUE' : '',
+                'Followers':     p.followers || '',
+                'Connections':   p.connections || '',
+                'Scraped At':    p.scrapedAt || ''
+            });
+        }
+    }
+
+    if (rows.length === 0) {
+        rows.push({ 'Profile URL': '(no jobs scraped)' });
+    }
+
+    // Create workbook + sheet
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Jobs');
+
+    // Auto-size columns (approximate)
+    const headers = Object.keys(rows[0]);
+    ws['!cols'] = headers.map(h => {
+        const maxLen = Math.max(h.length, ...rows.map(r => String(r[h] || '').length));
+        return { wch: Math.min(Math.max(maxLen + 2, 10), 60) };
+    });
+
+    // Write to ArrayBuffer
+    const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    return new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
