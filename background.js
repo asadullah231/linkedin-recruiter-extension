@@ -11,7 +11,7 @@
 // Load SheetJS for XLSX generation in service worker
 try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
 
-console.log('🟢 LRI Background v0.11.0 loaded');
+console.log('🟢 LRI Background v0.12.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -345,6 +345,18 @@ async function runBulkQueue() {
         });
     } catch {}
 
+    // ── Filter closed jobs (before AI ranking) ──
+    try {
+        const { aiSettings = {} } = await chrome.storage.local.get('aiSettings');
+        if (aiSettings.filterClosed) {
+            bulkLog('🚫 Filtering out closed jobs...', 'info');
+            const stats = await filterClosedJobs();
+            bulkLog(`🚫 Removed ${stats.removed} closed jobs (kept ${stats.kept})`, 'success');
+        }
+    } catch (err) {
+        bulkLog(`⚠️ Closed-job filter error: ${err.message}`, 'error');
+    }
+
     // ── AI top-job ranking (before n8n send) ──
     try {
         const { aiSettings = {} } = await chrome.storage.local.get('aiSettings');
@@ -375,6 +387,85 @@ async function runBulkQueue() {
     } catch (err) {
         bulkLog(`⚠️ n8n callback error: ${err.message}`, 'error');
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CLOSED-JOB FILTER
+// Visits each job URL via fetch() and removes jobs showing
+// "No longer accepting applications" / "This job is no longer available"
+// ═══════════════════════════════════════════════════════════════════════
+
+async function filterClosedJobs() {
+    const profiles = await getAllProfiles();
+    let removed = 0;
+    let kept = 0;
+
+    for (const profile of profiles) {
+        const posts = profile.hiringPosts || [];
+        if (posts.length === 0) continue;
+
+        const survivors = [];
+        for (const job of posts) {
+            if (!job.jobUrl) {
+                survivors.push(job);
+                continue;
+            }
+
+            try {
+                const closed = await isJobClosed(job.jobUrl);
+                if (closed) {
+                    removed++;
+                    bulkLog(`  ⏭ Closed: ${(job.title || 'Untitled').substring(0, 60)}`, 'info');
+                } else {
+                    survivors.push(job);
+                    kept++;
+                }
+            } catch (err) {
+                // Network/parse error → keep the job (fail-open)
+                survivors.push(job);
+                kept++;
+                console.warn(`Closed-check failed for ${job.jobUrl}:`, err.message);
+            }
+
+            // Polite throttle
+            await sleep(150);
+        }
+
+        profile.hiringPosts = survivors;
+        profile.hiringPostsCount = survivors.length;
+        await saveProfile(profile);
+    }
+
+    return { removed, kept };
+}
+
+async function isJobClosed(jobUrl) {
+    // Quick fetch — LinkedIn renders the closed banner directly in HTML
+    const res = await fetch(jobUrl, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'text/html' }
+    });
+
+    if (!res.ok) {
+        // Status 410 / 404 also means closed/removed
+        if (res.status === 404 || res.status === 410) return true;
+        return false;
+    }
+
+    const html = await res.text();
+
+    // Strong indicators of a closed job
+    const closedSignals = [
+        /no longer accepting applications/i,
+        /this job is no longer available/i,
+        /job is no longer accepting applications/i,
+        /no longer available/i,
+        />\s*Closed\s*</,
+        /this position has been filled/i
+    ];
+
+    return closedSignals.some(rx => rx.test(html));
 }
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -495,6 +495,10 @@ async function loadN8nSettings() {
     if (aiKeyEl) aiKeyEl.value = aiSettings.apiKey || '';
     if (aiModelEl) aiModelEl.value = aiSettings.model || 'google/gemini-flash-1.5';
     if (aiEnabledEl) aiEnabledEl.checked = !!aiSettings.enabled;
+
+    // Filter closed jobs setting
+    const filterClosedEl = document.getElementById('filter-closed-jobs');
+    if (filterClosedEl) filterClosedEl.checked = !!aiSettings.filterClosed;
 }
 
 function setupN8nListeners() {
@@ -544,7 +548,8 @@ async function saveN8nSettings() {
     const aiSettings = {
         apiKey: document.getElementById('ai-api-key')?.value.trim() || '',
         model: document.getElementById('ai-model')?.value || 'google/gemini-flash-1.5',
-        enabled: document.getElementById('ai-enabled')?.checked || false
+        enabled: document.getElementById('ai-enabled')?.checked || false,
+        filterClosed: document.getElementById('filter-closed-jobs')?.checked || false
     };
     await chrome.storage.local.set({ aiSettings });
 

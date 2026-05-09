@@ -138,6 +138,14 @@
                 </label>
             </div>
 
+            <div class="settings-row">
+                <label>
+                    <input type="checkbox" id="filter-closed-jobs" />
+                    🚫 <strong>Skip closed jobs</strong>
+                    <br><small>After scraping, extension visits each job URL briefly. Jobs showing "No longer accepting applications" are removed. Adds ~1s per job but ensures live results only.</small>
+                </label>
+            </div>
+
             <hr class="divider">
 
             <!-- ────────────────────────────────────────────── -->
@@ -237,7 +245,7 @@
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.11.0 · 📊 XLSX from Extension</p>
+        <p>LinkedIn Recruiter Intelligence v0.12.0 · 🚫 Skip Closed Jobs</p>
     </footer>
 
     <script src="popup.js"></script>
