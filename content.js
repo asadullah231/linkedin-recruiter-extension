@@ -218,25 +218,62 @@ function extractVoyagerData() {
                         };
                     }
 
-                    // Job posting (hiring posts!)
-                    if (item.$type?.includes('JobPosting')) {
-                        result.hiringPosts.push({
-                            jobId: item.entityUrn?.split(':').pop(),
-                            title: item.title,
-                            companyName: item.companyName,
-                            location: item.formattedLocation,
-                            postedAt: item.listedAt,
-                            jobUrl: item.applyMethod?.companyApplyUrl || `https://www.linkedin.com/jobs/view/${item.entityUrn?.split(':').pop()}`,
-                            applicants: item.applies
-                        });
+                    // Job posting (hiring posts!) — match a wider range of $types
+                    const t = item.$type || '';
+                    if (
+                        t.includes('JobPosting') ||
+                        t.includes('JobPostingCard') ||
+                        t.includes('Hiring') ||
+                        t.includes('jobPosting')
+                    ) {
+                        const urn = item.entityUrn || item.jobPostingUrn || item.objectUrn || '';
+                        const idMatch = String(urn).match(/(\d{6,})/);
+                        const jobId = idMatch?.[1];
+                        if (jobId) {
+                            result.hiringPosts.push({
+                                jobId,
+                                title: item.title || item.jobTitle || item.name || '',
+                                companyName: item.companyName || item.company?.name || '',
+                                location: item.formattedLocation || item.location || '',
+                                postedAt: item.listedAt || item.postedAt || null,
+                                jobUrl: item.applyMethod?.companyApplyUrl || `https://www.linkedin.com/jobs/view/${jobId}`,
+                                applicants: item.applies || null,
+                                source: 'voyager_json'
+                            });
+                        }
                     }
                 }
+            }
+
+            // ── Aggressive fallback: scan the raw JSON text for any
+            // LinkedIn job-posting URN that wasn't matched by $type above.
+            // This catches profiles where LinkedIn embeds the IDs without a
+            // typed wrapper (very common since the 2024 redesign).
+            const jobUrnRx = /urn:li:(?:fsd_)?jobPosting:(\d{6,})/g;
+            let m;
+            const seen = new Set(result.hiringPosts.map(p => p.jobId));
+            while ((m = jobUrnRx.exec(text)) !== null) {
+                const id = m[1];
+                if (seen.has(id)) continue;
+                seen.add(id);
+                result.hiringPosts.push({
+                    jobId: id,
+                    title: '',  // backfilled later via raw URL scan if needed
+                    companyName: '',
+                    location: '',
+                    postedAt: null,
+                    jobUrl: `https://www.linkedin.com/jobs/view/${id}`,
+                    source: 'voyager_urn_scan'
+                });
             }
         } catch {
             // Skip malformed JSON blocks
         }
     }
 
+    if (result.hiringPosts.length > 0) {
+        console.log(`🟢 LRI: Voyager found ${result.hiringPosts.length} job(s) total`);
+    }
     return result;
 }
 
@@ -625,7 +662,18 @@ async function extractHiringPosts(voyagerData) {
 
         if (showJobsLink) {
             console.log('🟢 LRI: Clicking show jobs link...');
-            showJobsLink.click();
+            // React-friendly click: a plain .click() doesn't always fire
+            // LinkedIn's onClick handler. Dispatch a real MouseEvent chain.
+            try {
+                ['mousedown', 'mouseup', 'click'].forEach(type => {
+                    showJobsLink.dispatchEvent(new MouseEvent(type, {
+                        bubbles: true, cancelable: true, view: window, button: 0
+                    }));
+                });
+            } catch (e) {
+                console.warn('🟡 LRI: MouseEvent dispatch failed, falling back to .click()', e);
+                showJobsLink.click();
+            }
 
             // Wait for modal AND its content to load (poll, don't just sleep)
             const modal = await waitForModal();
@@ -692,6 +740,39 @@ async function extractHiringPosts(voyagerData) {
         }
     } catch (err) {
         console.warn('⚠️ LRI: Activity posts scan failed:', err.message);
+    }
+
+    // Method 5 (LAST RESORT): scan the raw page HTML for any LinkedIn
+    // jobPosting URN. The 2024 redesign hides job IDs in <code>/<script>
+    // blobs that aren't valid JSON or aren't typed correctly, so the
+    // structured passes above miss them. This catches everything left.
+    if (posts.length === 0 && hiringBanner) {
+        console.log('🟢 LRI: All structured methods empty — running raw URN scan');
+        try {
+            const html = document.documentElement.outerHTML;
+            const seen = new Set();
+            const rx = /urn:li:(?:fsd_)?jobPosting:(\d{6,})/g;
+            let m;
+            while ((m = rx.exec(html)) !== null) {
+                const id = m[1];
+                if (seen.has(id)) continue;
+                seen.add(id);
+                posts.push({
+                    jobId: id,
+                    title: '(title unavailable — pull from job page on enrich)',
+                    company: null,
+                    location: null,
+                    postedAt: null,
+                    jobUrl: `https://www.linkedin.com/jobs/view/${id}`,
+                    source: 'urn_scan'
+                });
+            }
+            if (posts.length > 0) {
+                console.log(`🟢 LRI: Raw URN scan recovered ${posts.length} job(s)`);
+            }
+        } catch (err) {
+            console.warn('⚠️ LRI: Raw URN scan failed:', err.message);
+        }
     }
 
     return posts;
