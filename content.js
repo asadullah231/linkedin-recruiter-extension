@@ -97,21 +97,34 @@ async function extractProfileData() {
     const hiringPosts = await extractHiringPosts(voyagerData);
 
     // ── Combine everything ──
+    // ── Sanity: discard voyager.profile if it doesn't belong to the page we're on ──
+    // (sometimes the JSON cache contains the viewer-self entity ahead of the
+    // target profile, which leads to every scrape coming back as the logged-in user)
+    const expectedSlug = extractPublicIdentifier(profileUrl);
+    const voyagerSlug = voyagerData?.profile?.publicIdentifier;
+    const voyagerLooksValid = voyagerData?.profile?.firstName
+        && (!voyagerSlug || !expectedSlug || voyagerSlug === expectedSlug);
+    if (voyagerData?.profile && !voyagerLooksValid) {
+        console.warn('🟡 LRI: Voyager profile mismatch — discarding (slug', voyagerSlug, '!= expected', expectedSlug + ')');
+        voyagerData.profile = null;
+    }
+    const vp = voyagerLooksValid ? voyagerData.profile : null;
+
     return {
         scrapedAt: new Date().toISOString(),
         profileUrl,
-        publicIdentifier: extractPublicIdentifier(profileUrl),
+        publicIdentifier: expectedSlug,
 
-        // Identity
-        fullName: voyagerData?.profile?.firstName
-            ? `${voyagerData.profile.firstName} ${voyagerData.profile.lastName || ''}`.trim()
+        // Identity (voyager only used if it matches the page)
+        fullName: vp?.firstName
+            ? `${vp.firstName} ${vp.lastName || ''}`.trim()
             : domData.fullName,
-        firstName: voyagerData?.profile?.firstName || domData.firstName,
-        lastName: voyagerData?.profile?.lastName || domData.lastName,
-        headline: voyagerData?.profile?.headline || domData.headline,
-        location: voyagerData?.profile?.locationName || voyagerData?.profile?.geoLocationName || domData.location,
-        about: voyagerData?.profile?.summary || domData.about,
-        profilePic: voyagerData?.profile?.profilePicture || domData.profilePic,
+        firstName: vp?.firstName || domData.firstName,
+        lastName: vp?.lastName || domData.lastName,
+        headline: vp?.headline || domData.headline,
+        location: vp?.locationName || vp?.geoLocationName || domData.location,
+        about: vp?.summary || domData.about,
+        profilePic: vp?.profilePicture || domData.profilePic,
 
         // Current job
         currentCompany: voyagerData?.currentCompany?.name || domData.currentCompany,
@@ -234,19 +247,48 @@ function extractVoyagerData() {
 function extractDomData() {
     const data = {};
 
-    // ── NAME ── try MANY selectors + meta tags + page title fallback
-    data.fullName = q('h1.text-heading-xlarge')?.innerText?.trim()
-                 || q('h1.top-card-layout__title')?.innerText?.trim()
-                 || q('main h1')?.innerText?.trim()
-                 || q('section h1')?.innerText?.trim()
-                 || q('h1')?.innerText?.trim()
-                 || extractNameFromMeta()
-                 || extractNameFromTitle();
+    // ── NAME ── STRICT extraction.
+    // LinkedIn occasionally renders an h1 with the logged-in user's name
+    // in side panels / "People also viewed" / sticky widgets. The naive
+    // `h1` fallback was returning that. Now we scope to the profile's
+    // main top-card container ONLY, fall back to og:title (server-set),
+    // and reject any name that matches the logged-in user.
+    const myName = getLoggedInUserName();
+    const meRx   = myName ? new RegExp(`^${myName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'i') : null;
+
+    const candidates = [
+        // Modern profile top card
+        q('section.pv-top-card h1')?.innerText?.trim(),
+        q('.pv-text-details__left-panel h1')?.innerText?.trim(),
+        q('.ph5 h1.text-heading-xlarge')?.innerText?.trim(),
+        // Older / fallback profile shell
+        q('main section h1.text-heading-xlarge')?.innerText?.trim(),
+        q('main section h1.top-card-layout__title')?.innerText?.trim(),
+        // Server-rendered metadata (very reliable)
+        extractNameFromMeta(),
+        extractNameFromTitle()
+    ];
+
+    for (const cand of candidates) {
+        if (!cand) continue;
+        if (cand.length < 2 || cand.length > 80) continue;
+        if (/^linkedin/i.test(cand)) continue;
+        if (/^(view|message|follow|connect|edit|premium)/i.test(cand)) continue;
+        // Reject if it's the logged-in user's name (the bug we're fixing)
+        if (meRx && meRx.test(cand)) {
+            console.warn('🟡 LRI: Rejected name candidate (matches logged-in user):', cand);
+            continue;
+        }
+        data.fullName = cand.replace(/\s+/g, ' ');
+        break;
+    }
 
     if (data.fullName) {
         const parts = data.fullName.split(/\s+/);
         data.firstName = parts[0];
         data.lastName = parts.slice(1).join(' ') || null;
+    } else {
+        console.warn('🟡 LRI: Could not extract a profile name (all candidates rejected)');
     }
 
     // ── HEADLINE ── multiple modern selectors + meta fallback
@@ -349,6 +391,32 @@ function extractNameFromMeta() {
             if (name && name.length > 1 && name.length < 80 && !name.match(/^linkedin/i)) return name;
         }
     }
+    return null;
+}
+
+// Detect the logged-in user's display name from the global nav so we can
+// REJECT it when it accidentally appears as the page's h1 (which used to
+// cause every scraped profile to come back as "Iqra Chem").
+function getLoggedInUserName() {
+    try {
+        // Modern LinkedIn: profile photo in nav has alt = "Photo of <Your Name>"
+        // or aria-label "<Name>".
+        const meImg = q('.global-nav__me img.global-nav__me-photo')
+                   || q('img.global-nav__me-photo')
+                   || q('a.global-nav__me-photo')
+                   || q('button.global-nav__primary-link-me-menu-trigger img')
+                   || q('a.global-nav__primary-link-me-menu-trigger img');
+        const alt = meImg?.getAttribute?.('alt') || '';
+        let m = alt.match(/(?:photo of|profile picture of)\s+(.+)$/i);
+        if (m && m[1]) return m[1].trim();
+        if (alt && alt.length > 1 && alt.length < 80 && !/linkedin|profile/i.test(alt)) return alt.trim();
+
+        // Fallback: aria-label on me-menu trigger
+        const meBtn = q('button.global-nav__primary-link-me-menu-trigger, .global-nav__me [aria-label]');
+        const aria  = meBtn?.getAttribute?.('aria-label') || '';
+        m = aria.match(/^(.+?)(?:'s|\s*profile|\s*menu|$)/i);
+        if (m && m[1] && m[1].length < 80) return m[1].trim();
+    } catch (_) {}
     return null;
 }
 
