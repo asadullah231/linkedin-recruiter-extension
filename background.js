@@ -11,7 +11,7 @@
 // Load SheetJS for XLSX generation in service worker
 try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
 
-console.log('🟢 LRI Background v0.15.0 loaded');
+console.log('🟢 LRI Background v0.15.1 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -416,6 +416,7 @@ async function filterClosedJobs() {
     const profiles = await getAllProfiles();
     let removed = 0;
     let kept = 0;
+    let errored = 0;
 
     for (const profile of profiles) {
         const posts = profile.hiringPosts || [];
@@ -432,20 +433,21 @@ async function filterClosedJobs() {
                 const closed = await isJobClosed(job.jobUrl);
                 if (closed) {
                     removed++;
-                    bulkLog(`  ⏭ Closed: ${(job.title || 'Untitled').substring(0, 60)}`, 'info');
+                    bulkLog(`  ⏭ Closed:  ${(job.title || 'Untitled').substring(0, 70)}`, 'info');
                 } else {
                     survivors.push(job);
                     kept++;
+                    bulkLog(`  ✅ Live:    ${(job.title || 'Untitled').substring(0, 70)}`, 'success');
                 }
             } catch (err) {
-                // Network/parse error → keep the job (fail-open)
+                // Network/parse error → keep the job (fail-open) but flag
                 survivors.push(job);
-                kept++;
-                console.warn(`Closed-check failed for ${job.jobUrl}:`, err.message);
+                errored++;
+                bulkLog(`  ⚠️ Check failed (kept): ${(job.title || 'Untitled').substring(0, 50)} — ${err.message.substring(0, 50)}`, 'error');
             }
 
             // Polite throttle
-            await sleep(150);
+            await sleep(200);
         }
 
         profile.hiringPosts = survivors;
@@ -453,36 +455,95 @@ async function filterClosedJobs() {
         await saveProfile(profile);
     }
 
-    return { removed, kept };
+    bulkLog(`🚫 Filter summary: kept ${kept}, removed ${removed}, errored ${errored}`, 'info');
+    return { removed, kept, errored };
 }
 
 async function isJobClosed(jobUrl) {
-    // Quick fetch — LinkedIn renders the closed banner directly in HTML
-    const res = await fetch(jobUrl, {
-        method: 'GET',
-        credentials: 'include',
-        headers: { 'Accept': 'text/html' }
-    });
+    // Try the public guest endpoint FIRST — gives clean static HTML even when
+    // the regular page returns SPA shell. Convert /jobs/view/<id> → /jobs-guest/jobs/api/jobPosting/<id>
+    const idMatch = jobUrl.match(/\/jobs\/view\/(\d+)/);
+    const jobId = idMatch?.[1];
 
-    if (!res.ok) {
-        // Status 410 / 404 also means closed/removed
-        if (res.status === 404 || res.status === 410) return true;
-        return false;
+    let html = '';
+    let httpStatus = 0;
+
+    // Attempt 1: guest API (no auth needed, returns rendered HTML)
+    if (jobId) {
+        try {
+            const guestUrl = `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${jobId}`;
+            const r = await fetch(guestUrl, {
+                method: 'GET',
+                credentials: 'include',
+                headers: { 'Accept': 'text/html,application/xhtml+xml' }
+            });
+            httpStatus = r.status;
+            if (r.ok) html = await r.text();
+            else if (r.status === 404 || r.status === 410) return true;
+        } catch (_) { /* fall through */ }
     }
 
-    const html = await res.text();
+    // Attempt 2: full job URL fallback
+    if (!html) {
+        try {
+            const r = await fetch(jobUrl, {
+                method: 'GET',
+                credentials: 'include',
+                headers: { 'Accept': 'text/html' }
+            });
+            httpStatus = r.status;
+            if (r.ok) html = await r.text();
+            else if (r.status === 404 || r.status === 410) return true;
+        } catch (_) { return false; }
+    }
 
-    // Strong indicators of a closed job
-    const closedSignals = [
+    if (!html) return false;
+
+    // ── 1. Visible-text signals (rendered banners) ─────────────────────────
+    const textSignals = [
         /no longer accepting applications/i,
         /this job is no longer available/i,
         /job is no longer accepting applications/i,
-        /no longer available/i,
-        />\s*Closed\s*</,
-        /this position has been filled/i
+        /no longer accepting/i,
+        /this position has been filled/i,
+        /position has been filled/i,
+        /this job has been removed/i,
+        /this opening is no longer/i
     ];
+    if (textSignals.some(rx => rx.test(html))) return true;
 
-    return closedSignals.some(rx => rx.test(html));
+    // ── 2. Voyager / API JSON state signals ───────────────────────────────
+    const jsonSignals = [
+        /"jobState"\s*:\s*"(CLOSED|REMOVED|FILLED|EXPIRED|UNFILLED)"/i,
+        /"acceptingApplications"\s*:\s*false/i,
+        /"applyMethod"\s*:\s*"NONE"/i,
+        /"jobApplicationLimitReached"\s*:\s*true/i,
+        /"validThrough"\s*:\s*"(\d{4}-\d{2}-\d{2})/   // we'll re-verify the date below
+    ];
+    for (const rx of jsonSignals) {
+        const m = html.match(rx);
+        if (!m) continue;
+        if (rx.source.includes('validThrough')) {
+            // Only treat as closed if validThrough is in the past
+            try {
+                const d = new Date(m[1]);
+                if (!isNaN(d) && d < new Date()) return true;
+            } catch (_) {}
+        } else {
+            return true;
+        }
+    }
+
+    // ── 3. DOM class signals ──────────────────────────────────────────────
+    const domSignals = [
+        /jobs-unified-top-card--closed/i,
+        /job-state[^"']*closed/i,
+        /data-test-job-state=["']closed["']/i,
+        /class="[^"]*closed[^"]*"[^>]*>\s*Closed\s*</i
+    ];
+    if (domSignals.some(rx => rx.test(html))) return true;
+
+    return false;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
