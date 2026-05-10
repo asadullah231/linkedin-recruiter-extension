@@ -11,7 +11,7 @@
 // Load SheetJS for XLSX generation in service worker
 try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
 
-console.log('🟢 LRI Background v0.15.1 loaded');
+console.log('🟢 LRI Background v0.16.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -730,32 +730,68 @@ async function sendBulkResultsToN8n(settings, savedCount, skippedCount) {
 // XLSX BUILDER (uses SheetJS)
 // ═══════════════════════════════════════════════════════════════════════
 
+// Pick the single most senior / "top" job from a recruiter's hiring posts.
+// 1. AI-flagged isTopJob wins outright.
+// 2. Otherwise score titles by seniority keywords.
+// 3. Fall back to the first post.
+function pickTopJob(posts) {
+    if (!posts || posts.length === 0) return null;
+    if (posts.length === 1) return posts[0];
+
+    // 1. AI-tagged
+    const aiTop = posts.find(p => p.isTopJob === true);
+    if (aiTop) return aiTop;
+
+    // 2. Heuristic scoring (higher = more senior)
+    const tiers = [
+        [/\b(chief|c[eofitm]o|founder|partner)\b/i,                    100],
+        [/\b(vp|vice\s*president|svp|evp)\b/i,                          80],
+        [/\b(director|head\s+of)\b/i,                                   65],
+        [/\b(senior\s+manager|sr\.?\s+manager|principal)\b/i,           50],
+        [/\b(manager|lead|architect|staff)\b/i,                         35],
+        [/\b(senior|sr\.?)\b/i,                                         25],
+        [/\b(specialist|consultant|engineer|developer|designer|analyst)\b/i, 10],
+        [/\b(junior|jr\.?|associate|entry|intern|trainee|graduate)\b/i, -10]
+    ];
+
+    let bestIdx = 0, bestScore = -1000;
+    posts.forEach((p, i) => {
+        const t = (p.title || '').toLowerCase();
+        let score = 0;
+        for (const [rx, val] of tiers) {
+            if (rx.test(t)) { score = val; break; }
+        }
+        if (score > bestScore) { bestScore = score; bestIdx = i; }
+    });
+    return posts[bestIdx];
+}
+
 function buildXlsxBlob(profiles) {
-    // Build flat rows: 1 row per (profile × job)
+    // 1 row PER PROFILE — only the top job (no more multiple rows for the same recruiter)
     const rows = [];
     for (const p of profiles) {
         const posts = p.hiringPosts || [];
         if (posts.length === 0) continue;
 
-        for (const j of posts) {
-            rows.push({
-                'Profile URL':   p.profileUrl || '',
-                'Full Name':     p.fullName || '',
-                'First Name':    p.firstName || '',
-                'Last Name':     p.lastName || '',
-                'Job Title':     j.title || '',
-                'Job URL':       j.jobUrl || '',
-                'Job Location':  j.location || '',
-                'Company':       j.companyName || j.company || p.currentCompany || '',
-                'Headline':      p.headline || '',
-                'Source':        j.source || 'hiring_badge',
-                'Post URL':      j.postUrl || '',
-                'Is Top Job':    j.isTopJob ? 'TRUE' : '',
-                'Followers':     p.followers || '',
-                'Connections':   p.connections || '',
-                'Scraped At':    p.scrapedAt || ''
-            });
-        }
+        const j = pickTopJob(posts) || posts[0];
+
+        rows.push({
+            'Profile URL':   p.profileUrl || '',
+            'Full Name':     p.fullName || '',
+            'First Name':    p.firstName || '',
+            'Last Name':     p.lastName || '',
+            'Job Title':     j.title || '',
+            'Job URL':       j.jobUrl || '',
+            'Job Location':  j.location || '',
+            'Company':       j.companyName || j.company || p.currentCompany || '',
+            'Headline':      p.headline || '',
+            'Source':        j.source || 'hiring_badge',
+            'Post URL':      j.postUrl || '',
+            'Total Jobs':    posts.length,   // for context — how many we found in total
+            'Followers':     p.followers || '',
+            'Connections':   p.connections || '',
+            'Scraped At':    p.scrapedAt || ''
+        });
     }
 
     if (rows.length === 0) {

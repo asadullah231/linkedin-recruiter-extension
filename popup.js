@@ -363,7 +363,7 @@ function buildJobsCsv(profiles) {
         'Job Location',
         'Source',
         'Post URL',
-        'Is Top Job'
+        'Total Jobs'
     ];
 
     const rows = [headers.map(csvEscape).join(',')];
@@ -372,28 +372,54 @@ function buildJobsCsv(profiles) {
         const posts = profile.hiringPosts || [];
         if (posts.length === 0) continue;
 
-        for (const job of posts) {
-            const email = guessEmail(profile, job);
-            const row = [
-                job.jobUrl || '',
-                email || '',
-                job.companyLinkedinUrl || '',
-                job.companyName || job.company || profile.currentCompany || '',
-                profile.fullName || '',
-                profile.firstName || '',
-                profile.lastName || '',
-                profile.profileUrl || '',
-                job.title || '',
-                job.location || '',
-                job.source || 'hiring_badge',
-                job.postUrl || '',
-                job.isTopJob ? 'TRUE' : ''
-            ];
-            rows.push(row.map(csvEscape).join(','));
-        }
+        // Pick exactly ONE job per profile (top by AI flag, else heuristic, else first)
+        const job = pickTopJobLocal(posts) || posts[0];
+        const email = guessEmail(profile, job);
+        const row = [
+            job.jobUrl || '',
+            email || '',
+            job.companyLinkedinUrl || '',
+            job.companyName || job.company || profile.currentCompany || '',
+            profile.fullName || '',
+            profile.firstName || '',
+            profile.lastName || '',
+            profile.profileUrl || '',
+            job.title || '',
+            job.location || '',
+            job.source || 'hiring_badge',
+            job.postUrl || '',
+            posts.length
+        ];
+        rows.push(row.map(csvEscape).join(','));
     }
 
     return rows.join('\n');
+}
+
+// Same heuristic as background.js — kept local for popup.js to use
+function pickTopJobLocal(posts) {
+    if (!posts || posts.length === 0) return null;
+    if (posts.length === 1) return posts[0];
+    const aiTop = posts.find(p => p.isTopJob === true);
+    if (aiTop) return aiTop;
+    const tiers = [
+        [/\b(chief|c[eofitm]o|founder|partner)\b/i, 100],
+        [/\b(vp|vice\s*president|svp|evp)\b/i, 80],
+        [/\b(director|head\s+of)\b/i, 65],
+        [/\b(senior\s+manager|sr\.?\s+manager|principal)\b/i, 50],
+        [/\b(manager|lead|architect|staff)\b/i, 35],
+        [/\b(senior|sr\.?)\b/i, 25],
+        [/\b(specialist|consultant|engineer|developer|designer|analyst)\b/i, 10],
+        [/\b(junior|jr\.?|associate|entry|intern|trainee|graduate)\b/i, -10]
+    ];
+    let bestIdx = 0, bestScore = -1000;
+    posts.forEach((p, i) => {
+        const t = (p.title || '').toLowerCase();
+        let score = 0;
+        for (const [rx, val] of tiers) { if (rx.test(t)) { score = val; break; } }
+        if (score > bestScore) { bestScore = score; bestIdx = i; }
+    });
+    return posts[bestIdx];
 }
 
 function buildProfilesCsv(profiles) {
