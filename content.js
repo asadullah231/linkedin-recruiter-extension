@@ -710,7 +710,8 @@ async function extractHiringPosts(voyagerData) {
     const hiringBanner = findHiringBanner();
 
     if (hiringBanner) {
-        console.log('🟢 LRI: Found hiring banner, looking for show jobs link...');
+        console.log('🟢 LRI: Found hiring banner. text(0..120):', (hiringBanner.innerText || '').substring(0, 120));
+        console.log('🟢 LRI: Banner outerHTML (0..600):', (hiringBanner.outerHTML || '').substring(0, 600));
 
         // ── Quick win: if banner itself has /jobs/view/<id> links, scrape inline first ──
         const directJobLinks = hiringBanner.querySelectorAll('a[href*="/jobs/view/"]');
@@ -828,55 +829,80 @@ async function extractHiringPosts(voyagerData) {
         console.warn('⚠️ LRI: Activity posts scan failed:', err.message);
     }
 
-    // ── Method 5.5 (CRITICAL for multi-job recruiters): fetch the
-    // recruiter's recent-activity/jobs page directly. LinkedIn lazy-loads
-    // the modal contents on click for profiles with 2+ open roles, so the
-    // job URNs are NOT in the page HTML until the user clicks "Show N
-    // jobs" — and that click is React-isTrusted-gated, so we can't fake
-    // it. The /recent-activity/jobs/ URL renders the same data SSR.
+    // ── Method 5.5 (CRITICAL for multi-job recruiters): fetch one of
+    // LinkedIn's hiring-posts URLs in the background. LinkedIn lazy-loads
+    // the modal contents on click for profiles with 2+ open roles, and
+    // the click is React-isTrusted-gated, so we can't fake it. We try a
+    // sequence of URLs that sometimes contain the same SSR data.
     if (posts.length === 0) {
-        try {
-            const slug = extractPublicIdentifier(window.location.href);
-            if (slug) {
-                const activityUrl = `https://www.linkedin.com/in/${slug}/recent-activity/jobs/`;
-                console.log('🟢 LRI: Fetching recent-activity/jobs/ →', activityUrl);
-                const res = await fetch(activityUrl, { credentials: 'include' });
-                if (res.ok) {
+        const slug = extractPublicIdentifier(window.location.href);
+        console.log('🟢 LRI: Posts still 0 — trying URL fallbacks for slug:', slug);
+
+        if (slug) {
+            // ── Try: harvest the actual "Show N jobs" element href if any ──
+            const showLink = q('a[href*="recent-activity"], a[href*="hiring"]')
+                          || qq('a, button').find(el => /show\s+\d*\s*jobs?|see\s+\d*\s*jobs?/i.test(el.innerText || ''));
+            if (showLink) {
+                console.log('🟢 LRI: Found show-jobs element:',
+                    showLink.tagName,
+                    'href=', showLink.getAttribute?.('href'),
+                    'data-attrs=', JSON.stringify(Object.fromEntries(
+                        Array.from(showLink.attributes || []).filter(a => a.name.startsWith('data-')).map(a => [a.name, a.value])
+                    )));
+            } else {
+                console.log('🟢 LRI: No show-jobs element found on page');
+            }
+
+            const candidateUrls = [
+                `https://www.linkedin.com/in/${slug}/recent-activity/jobs/`,
+                `https://www.linkedin.com/in/${slug}/recent-activity/all/`,
+                showLink?.getAttribute?.('href') ? new URL(showLink.getAttribute('href'), window.location.origin).href : null
+            ].filter(Boolean);
+
+            const seen = new Set();
+            const patterns = [
+                /urn:li:(?:fsd_)?(?:jobPosting|jobs):(\d{6,})/g,
+                /\/jobs\/view\/(\d{6,})/g,
+                /["']jobPostingId["']\s*:\s*["']?(\d{6,})/g
+            ];
+
+            for (const url of candidateUrls) {
+                try {
+                    console.log('🟢 LRI: Trying fetch →', url);
+                    const res = await fetch(url, { credentials: 'include', headers: { 'Accept': 'text/html' } });
+                    console.log('🟢 LRI:   ↳ HTTP', res.status, 'final URL:', res.url);
+
+                    if (!res.ok) continue;
                     const html = await res.text();
-                    const seen = new Set();
-                    const patterns = [
-                        /urn:li:(?:fsd_)?(?:jobPosting|jobs):(\d{6,})/g,
-                        /\/jobs\/view\/(\d{6,})/g,
-                        /["']jobPostingId["']\s*:\s*["']?(\d{6,})/g
-                    ];
+                    console.log('🟢 LRI:   ↳ body', html.length, 'bytes');
+
+                    const before = seen.size;
                     for (const rx of patterns) {
                         let m;
-                        while ((m = rx.exec(html)) !== null) {
-                            const id = m[1];
-                            if (seen.has(id)) continue;
-                            seen.add(id);
-                        }
+                        while ((m = rx.exec(html)) !== null) seen.add(m[1]);
                     }
-                    for (const id of seen) {
-                        posts.push({
-                            jobId: id,
-                            title: '(title unavailable — enrich step will fill it)',
-                            company: null,
-                            location: null,
-                            postedAt: null,
-                            jobUrl: `https://www.linkedin.com/jobs/view/${id}`,
-                            source: 'recent_activity_fetch'
-                        });
-                    }
-                    if (posts.length > 0) {
-                        console.log(`🟢 LRI: recent-activity/jobs fetch recovered ${posts.length} job(s)`);
-                    }
-                } else {
-                    console.warn('⚠️ LRI: recent-activity/jobs fetch HTTP', res.status);
+                    console.log('🟢 LRI:   ↳ found', seen.size - before, 'new job IDs (total', seen.size + ')');
+
+                    if (seen.size > 0) break;  // got some, no need to try more URLs
+                } catch (err) {
+                    console.warn('🟡 LRI:   ↳ fetch failed:', err.message);
                 }
             }
-        } catch (err) {
-            console.warn('⚠️ LRI: recent-activity/jobs fetch failed:', err.message);
+
+            for (const id of seen) {
+                posts.push({
+                    jobId: id,
+                    title: '(title unavailable — enrich step will fill it)',
+                    company: null,
+                    location: null,
+                    postedAt: null,
+                    jobUrl: `https://www.linkedin.com/jobs/view/${id}`,
+                    source: 'recent_activity_fetch'
+                });
+            }
+            if (posts.length > 0) {
+                console.log(`🟢 LRI: URL-fetch recovered ${posts.length} job(s)`);
+            }
         }
     }
 
