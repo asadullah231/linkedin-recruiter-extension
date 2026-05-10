@@ -11,7 +11,7 @@
 // Load SheetJS for XLSX generation in service worker
 try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
 
-console.log('🟢 LRI Background v0.16.0 loaded');
+console.log('🟢 LRI Background v0.16.1 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -500,15 +500,15 @@ async function isJobClosed(jobUrl) {
     if (!html) return false;
 
     // ── 1. Visible-text signals (rendered banners) ─────────────────────────
+    // Be conservative — only match phrases LinkedIn actually shows in the
+    // closed banner, not generic substrings that could appear in body copy.
     const textSignals = [
         /no longer accepting applications/i,
         /this job is no longer available/i,
         /job is no longer accepting applications/i,
-        /no longer accepting/i,
         /this position has been filled/i,
-        /position has been filled/i,
         /this job has been removed/i,
-        /this opening is no longer/i
+        /this job posting is no longer/i
     ];
     if (textSignals.some(rx => rx.test(html))) return true;
 

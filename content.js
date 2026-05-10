@@ -520,7 +520,40 @@ async function extractHiringPosts(voyagerData) {
 
     if (hiringBanner) {
         console.log('🟢 LRI: Found hiring banner, looking for show jobs link...');
-        const showJobsLink = findShowJobsLink(hiringBanner);
+
+        // ── Quick win: if banner itself has /jobs/view/<id> links, scrape inline first ──
+        const directJobLinks = hiringBanner.querySelectorAll('a[href*="/jobs/view/"]');
+        if (directJobLinks.length > 0) {
+            console.log(`🟢 LRI: Banner has ${directJobLinks.length} direct job link(s) — extracting without modal`);
+            const seen = new Set();
+            for (const link of directJobLinks) {
+                const idMatch = link.href.match(/\/jobs\/view\/(\d+)/);
+                const jobId = idMatch?.[1];
+                if (!jobId || seen.has(jobId)) continue;
+                seen.add(jobId);
+                const card = link.closest('li, article, div') || hiringBanner;
+                const titleEl = card.querySelector('h3, h4, [class*="title"], strong') || link;
+                const title = (titleEl.innerText || link.innerText || '').trim().split('\n')[0];
+                if (title && title.length > 3) {
+                    posts.push({
+                        jobId,
+                        title: title.substring(0, 200),
+                        company: card.querySelector('[class*="company"], [class*="subtitle"]')?.innerText?.trim().split('\n')[0] || null,
+                        location: null,
+                        postedAt: null,
+                        jobUrl: `https://www.linkedin.com/jobs/view/${jobId}`,
+                        source: 'hiring_badge'
+                    });
+                }
+            }
+        }
+
+        // If we already got jobs from the banner (single-job recruiters), skip the modal step
+        if (posts.length > 0) {
+            console.log(`🟢 LRI: Got ${posts.length} job(s) directly from banner — skipping modal`);
+        }
+
+        const showJobsLink = posts.length === 0 ? findShowJobsLink(hiringBanner) : null;
 
         if (showJobsLink) {
             console.log('🟢 LRI: Clicking show jobs link...');
@@ -684,7 +717,8 @@ function findHiringBanner() {
     for (const el of candidates) {
         const text = (el.innerText || '').trim();
         if (text.length > 800 || text.length < 5) continue;
-        if (text.match(/^Hiring:/i) || text.match(/Show\s+\d+\s+job/i)) {
+        // Match BOTH "Show 5 jobs" and the singular "Show job" (when only 1 opening exists)
+        if (text.match(/^Hiring:/i) || text.match(/\bShow\s+(\d+\s+)?jobs?\b/i)) {
             return el;
         }
     }
@@ -696,13 +730,22 @@ function findShowJobsLink(banner) {
     const allClickables = banner.querySelectorAll('a, button, [role="button"], [tabindex="0"]');
     for (const el of allClickables) {
         const text = (el.innerText || '').trim();
-        if (text.match(/^show\s+\d+\s+job/i) || text.match(/^see\s+(all|more)\s+job/i)) {
+        // Match: "Show job", "Show 1 job", "Show 5 jobs", "See all jobs", "See more jobs", "View all"
+        if (
+            text.match(/^show\s+(\d+\s+)?jobs?$/i) ||
+            text.match(/^see\s+(all|more)\s+jobs?$/i) ||
+            text.match(/^view\s+(all|jobs?)/i)
+        ) {
             return el;
         }
     }
     // Fallback: if banner itself is clickable
     if (banner.tagName === 'A' || banner.tagName === 'BUTTON' || banner.getAttribute('role') === 'button') {
         return banner;
+    }
+    // Fallback 2: any link inside the banner that goes to /jobs/
+    for (const el of allClickables) {
+        if (el.href && /\/jobs\//.test(el.href)) return el;
     }
     return null;
 }
