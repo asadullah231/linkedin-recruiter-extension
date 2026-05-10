@@ -11,7 +11,7 @@
 // Load SheetJS for XLSX generation in service worker
 try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
 
-console.log('🟢 LRI Background v0.16.1 loaded');
+console.log('🟢 LRI Background v0.17.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -308,6 +308,12 @@ async function runBulkQueue() {
                     // Delete the auto-save (saveProfile triggered when content.js posted)
                     await deleteProfile(url);
                     skippedCount++;
+                    // 🔁 Stream: tell n8n this URL is done with no jobs (mark complete in NocoDB)
+                    streamProfileToN8n({
+                        profileUrl: url,
+                        status: 'complete_no_jobs',
+                        scrapedAt: new Date().toISOString()
+                    }).catch(() => {});
                 } else {
                     bulkLog(`  ✅ ${name} — ${jobsCount} hiring jobs`, 'success');
                     hadJobs = true;
@@ -328,6 +334,15 @@ async function runBulkQueue() {
                         }
                         profileData.enriched = true;
                         await saveProfile(profileData);
+                    }
+
+                    // 🔁 Stream: push this single profile's result to n8n NOW
+                    //    (no waiting for batch — NocoDB row updates live)
+                    try {
+                        await streamProfileToN8n(profileData);
+                        bulkLog(`    📤 Pushed to NocoDB`, 'success');
+                    } catch (err) {
+                        bulkLog(`    ⚠️ Push failed: ${err.message.substring(0, 60)}`, 'error');
                     }
                 }
             }
@@ -386,12 +401,14 @@ async function runBulkQueue() {
         bulkLog(`⚠️ AI ranking error: ${err.message}`, 'error');
     }
 
-    // ── n8n auto-callback ──
+    // ── BATCH XLSX FLOW DISABLED ──
+    // Profiles are now pushed live to /webhook/profile-done as they finish.
+    // The bulk XLSX → Slack flow stays available for the manual "Send Now" button only.
+    // (was: sendBulkResultsToN8n)
+    bulkLog(`📊 Streaming mode: ${savedCount} profile(s) pushed live to NocoDB.`, 'info');
+
     try {
         const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
-        if (n8nSettings.autoSend && n8nSettings.callbackUrl) {
-            await sendBulkResultsToN8n(n8nSettings, savedCount, skippedCount);
-        }
 
         // ── stop-after-batch: disable auto-pull when batch completes ──
         if (n8nSettings.autoPull && n8nSettings.stopAfterBatch) {
@@ -404,6 +421,33 @@ async function runBulkQueue() {
     } catch (err) {
         bulkLog(`⚠️ n8n callback error: ${err.message}`, 'error');
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// STREAMING — push every scraped profile to n8n immediately
+// (so NocoDB row updates live, one at a time)
+// ═══════════════════════════════════════════════════════════════════════
+
+const N8N_PROFILE_DONE_URL = 'https://n8n.emergeautomation.tech/webhook/profile-done';
+
+async function streamProfileToN8n(profileData) {
+    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+    const headers = { 'Content-Type': 'application/json' };
+    if (n8nSettings.apiKey) headers['Authorization'] = `Bearer ${n8nSettings.apiKey}`;
+
+    const res = await fetch(N8N_PROFILE_DONE_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            source: 'linkedin-recruiter-extension',
+            version: '0.17.0',
+            timestamp: new Date().toISOString(),
+            profile: profileData
+        })
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json().catch(() => ({}));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
