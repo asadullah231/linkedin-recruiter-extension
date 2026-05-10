@@ -102,13 +102,50 @@ async function extractProfileData() {
     // target profile, which leads to every scrape coming back as the logged-in user)
     const expectedSlug = extractPublicIdentifier(profileUrl);
     const voyagerSlug = voyagerData?.profile?.publicIdentifier;
-    const voyagerLooksValid = voyagerData?.profile?.firstName
-        && (!voyagerSlug || !expectedSlug || voyagerSlug === expectedSlug);
+    const myName = getLoggedInUserName();
+    const voyagerName = voyagerData?.profile?.firstName
+        ? `${voyagerData.profile.firstName} ${voyagerData.profile.lastName || ''}`.trim()
+        : null;
+
+    // Reject voyager.profile if ANY of these red flags fire:
+    //   1) publicIdentifier is set AND doesn't match the URL slug
+    //   2) name matches the currently logged-in user (covers the common case where
+    //      voyager has no publicIdentifier on the viewer-self entity)
+    let voyagerLooksValid = !!voyagerData?.profile?.firstName;
+    if (voyagerLooksValid && voyagerSlug && expectedSlug && voyagerSlug !== expectedSlug) {
+        console.warn('🟡 LRI: Voyager profile slug mismatch — discarding (slug', voyagerSlug, '!= expected', expectedSlug + ')');
+        voyagerLooksValid = false;
+    }
+    if (voyagerLooksValid && myName && voyagerName &&
+        voyagerName.toLowerCase() === myName.toLowerCase()) {
+        console.warn('🟡 LRI: Voyager profile = logged-in user (' + voyagerName + ') — discarding');
+        voyagerLooksValid = false;
+    }
     if (voyagerData?.profile && !voyagerLooksValid) {
-        console.warn('🟡 LRI: Voyager profile mismatch — discarding (slug', voyagerSlug, '!= expected', expectedSlug + ')');
         voyagerData.profile = null;
     }
     const vp = voyagerLooksValid ? voyagerData.profile : null;
+
+    // ── Final guard: even if voyager passed and we ended up with a name,
+    // make sure it's NOT the logged-in user's name. If it is, prefer DOM.
+    let chosenFullName = vp?.firstName
+        ? `${vp.firstName} ${vp.lastName || ''}`.trim()
+        : domData.fullName;
+    let chosenFirstName = vp?.firstName || domData.firstName;
+    let chosenLastName  = vp?.lastName  || domData.lastName;
+    if (myName && chosenFullName && chosenFullName.toLowerCase() === myName.toLowerCase()) {
+        console.warn('🟡 LRI: Final-guard rejected name = logged-in user (' + chosenFullName + '), falling back');
+        // If DOM name is also = logged-in user (or empty), null everything.
+        if (domData.fullName && domData.fullName.toLowerCase() !== myName.toLowerCase()) {
+            chosenFullName  = domData.fullName;
+            chosenFirstName = domData.firstName;
+            chosenLastName  = domData.lastName;
+        } else {
+            chosenFullName = null;
+            chosenFirstName = null;
+            chosenLastName = null;
+        }
+    }
 
     return {
         scrapedAt: new Date().toISOString(),
@@ -116,11 +153,9 @@ async function extractProfileData() {
         publicIdentifier: expectedSlug,
 
         // Identity (voyager only used if it matches the page)
-        fullName: vp?.firstName
-            ? `${vp.firstName} ${vp.lastName || ''}`.trim()
-            : domData.fullName,
-        firstName: vp?.firstName || domData.firstName,
-        lastName: vp?.lastName || domData.lastName,
+        fullName: chosenFullName,
+        firstName: chosenFirstName,
+        lastName: chosenLastName,
         headline: vp?.headline || domData.headline,
         location: vp?.locationName || vp?.geoLocationName || domData.location,
         about: vp?.summary || domData.about,
@@ -181,6 +216,7 @@ function extractVoyagerData() {
                     headline: json.data.headline,
                     locationName: json.data.locationName,
                     geoLocationName: json.data.geoLocationName,
+                    publicIdentifier: json.data.publicIdentifier || null,
                     summary: json.data.summary,
                     profilePicture: extractPicUrl(json.data.profilePicture)
                 };
@@ -197,6 +233,7 @@ function extractVoyagerData() {
                         result.profile.headline = item.headline;
                         result.profile.locationName = item.locationName;
                         result.profile.geoLocationName = item.geoLocationName;
+                        result.profile.publicIdentifier = item.publicIdentifier || null;
                         result.profile.summary = item.summary;
                     }
 
@@ -436,25 +473,66 @@ function extractNameFromMeta() {
 // cause every scraped profile to come back as "Iqra Chem").
 function getLoggedInUserName() {
     try {
-        // Modern LinkedIn: profile photo in nav has alt = "Photo of <Your Name>"
-        // or aria-label "<Name>".
-        const meImg = q('.global-nav__me img.global-nav__me-photo')
-                   || q('img.global-nav__me-photo')
-                   || q('a.global-nav__me-photo')
-                   || q('button.global-nav__primary-link-me-menu-trigger img')
-                   || q('a.global-nav__primary-link-me-menu-trigger img');
-        const alt = meImg?.getAttribute?.('alt') || '';
-        let m = alt.match(/(?:photo of|profile picture of)\s+(.+)$/i);
-        if (m && m[1]) return m[1].trim();
-        if (alt && alt.length > 1 && alt.length < 80 && !/linkedin|profile/i.test(alt)) return alt.trim();
+        // Strategy 1: nav profile photo (alt text)
+        const imgSelectors = [
+            '.global-nav__me img.global-nav__me-photo',
+            'img.global-nav__me-photo',
+            'a.global-nav__me-photo img',
+            'button.global-nav__primary-link-me-menu-trigger img',
+            'a.global-nav__primary-link-me-menu-trigger img',
+            '.global-nav img[alt]',
+            'header img.evi-image',  // newer header
+            'nav img[width="32"][alt]'
+        ];
+        for (const sel of imgSelectors) {
+            const el = q(sel);
+            const alt = el?.getAttribute?.('alt') || '';
+            if (!alt) continue;
+            let m = alt.match(/(?:photo of|profile picture of|picture of)\s+(.+)$/i);
+            if (m?.[1]) return cleanName(m[1]);
+            if (alt.length > 1 && alt.length < 80 && !/linkedin|profile|photo/i.test(alt)) {
+                return cleanName(alt);
+            }
+        }
 
-        // Fallback: aria-label on me-menu trigger
-        const meBtn = q('button.global-nav__primary-link-me-menu-trigger, .global-nav__me [aria-label]');
-        const aria  = meBtn?.getAttribute?.('aria-label') || '';
-        m = aria.match(/^(.+?)(?:'s|\s*profile|\s*menu|$)/i);
-        if (m && m[1] && m[1].length < 80) return m[1].trim();
+        // Strategy 2: aria-label on me-menu trigger
+        const ariaSelectors = [
+            'button.global-nav__primary-link-me-menu-trigger',
+            '.global-nav__me [aria-label]',
+            'button[aria-label*="menu"]',
+            'a[href="/in/me/"]'
+        ];
+        for (const sel of ariaSelectors) {
+            const el = q(sel);
+            const aria = el?.getAttribute?.('aria-label') || '';
+            if (!aria) continue;
+            const m = aria.match(/^(.+?)(?:'s|\s*profile|\s*menu|$)/i);
+            if (m?.[1] && m[1].length < 80) return cleanName(m[1]);
+        }
+
+        // Strategy 3: voyager hidden data — look for the SELF entity
+        // Many pages embed { "miniProfile": { firstName, lastName, publicIdentifier }, ... }
+        // tagged with $type containing "MeViewer" or in "data.*.miniProfile"
+        const codeBlocks = document.querySelectorAll('code[id^="bpr-guid-"]');
+        for (const code of codeBlocks) {
+            try {
+                const json = JSON.parse(code.textContent.trim());
+                const items = json?.included || [];
+                for (const item of items) {
+                    if (item?.$type?.includes('MiniProfile') &&
+                        item.firstName && item.lastName &&
+                        /global-nav|me|self/i.test(item?.$id || '')) {
+                        return `${item.firstName} ${item.lastName}`.trim();
+                    }
+                }
+            } catch (_) {}
+        }
     } catch (_) {}
     return null;
+}
+
+function cleanName(s) {
+    return String(s).replace(/\s+/g, ' ').trim();
 }
 
 function extractNameFromTitle() {
