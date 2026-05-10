@@ -828,13 +828,61 @@ async function extractHiringPosts(voyagerData) {
         console.warn('⚠️ LRI: Activity posts scan failed:', err.message);
     }
 
+    // ── Method 5.5 (CRITICAL for multi-job recruiters): fetch the
+    // recruiter's recent-activity/jobs page directly. LinkedIn lazy-loads
+    // the modal contents on click for profiles with 2+ open roles, so the
+    // job URNs are NOT in the page HTML until the user clicks "Show N
+    // jobs" — and that click is React-isTrusted-gated, so we can't fake
+    // it. The /recent-activity/jobs/ URL renders the same data SSR.
+    if (posts.length === 0) {
+        try {
+            const slug = extractPublicIdentifier(window.location.href);
+            if (slug) {
+                const activityUrl = `https://www.linkedin.com/in/${slug}/recent-activity/jobs/`;
+                console.log('🟢 LRI: Fetching recent-activity/jobs/ →', activityUrl);
+                const res = await fetch(activityUrl, { credentials: 'include' });
+                if (res.ok) {
+                    const html = await res.text();
+                    const seen = new Set();
+                    const patterns = [
+                        /urn:li:(?:fsd_)?(?:jobPosting|jobs):(\d{6,})/g,
+                        /\/jobs\/view\/(\d{6,})/g,
+                        /["']jobPostingId["']\s*:\s*["']?(\d{6,})/g
+                    ];
+                    for (const rx of patterns) {
+                        let m;
+                        while ((m = rx.exec(html)) !== null) {
+                            const id = m[1];
+                            if (seen.has(id)) continue;
+                            seen.add(id);
+                        }
+                    }
+                    for (const id of seen) {
+                        posts.push({
+                            jobId: id,
+                            title: '(title unavailable — enrich step will fill it)',
+                            company: null,
+                            location: null,
+                            postedAt: null,
+                            jobUrl: `https://www.linkedin.com/jobs/view/${id}`,
+                            source: 'recent_activity_fetch'
+                        });
+                    }
+                    if (posts.length > 0) {
+                        console.log(`🟢 LRI: recent-activity/jobs fetch recovered ${posts.length} job(s)`);
+                    }
+                } else {
+                    console.warn('⚠️ LRI: recent-activity/jobs fetch HTTP', res.status);
+                }
+            }
+        } catch (err) {
+            console.warn('⚠️ LRI: recent-activity/jobs fetch failed:', err.message);
+        }
+    }
+
     // Method 5 (LAST RESORT): scan the raw page HTML for any LinkedIn
-    // jobPosting URN or /jobs/view/<id> reference. The 2024 redesign hides
-    // job IDs in <code>/<script> blobs and JSON strings that aren't picked
-    // up by the structured passes above.
-    //
-    // Always runs (even if hiringBanner wasn't detected) — banner detection
-    // misses many of LinkedIn's newer hiring section variants.
+    // jobPosting URN or /jobs/view/<id> reference. Runs only if Method 5.5
+    // also came up empty.
     if (posts.length === 0) {
         console.log('🟢 LRI: All structured methods empty — running raw HTML scan');
         try {
