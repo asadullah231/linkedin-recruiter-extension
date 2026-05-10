@@ -691,10 +691,18 @@ function findExperienceSectionCompany() {
 async function extractHiringPosts(voyagerData) {
     const posts = [];
 
-    // Method 1: Already extracted from voyager <code> tags
+    // Method 1: Already extracted from voyager <code> tags — seed but DON'T return.
+    // We'll still run subsequent methods to enrich titles/locations missing
+    // from the URN-only voyager scan.
     if (voyagerData?.hiringPosts?.length > 0) {
-        console.log('🟢 LRI: Got hiring posts from voyager data:', voyagerData.hiringPosts.length);
-        return voyagerData.hiringPosts;
+        console.log('🟢 LRI: Voyager seeded', voyagerData.hiringPosts.length, 'job(s) — enriching');
+        const seen = new Set();
+        for (const j of voyagerData.hiringPosts) {
+            if (j.jobId && !seen.has(j.jobId)) {
+                seen.add(j.jobId);
+                posts.push(j);
+            }
+        }
     }
 
     // Method 2: Find hiring banner & click "Show N jobs"
@@ -821,23 +829,55 @@ async function extractHiringPosts(voyagerData) {
     }
 
     // Method 5 (LAST RESORT): scan the raw page HTML for any LinkedIn
-    // jobPosting URN. The 2024 redesign hides job IDs in <code>/<script>
-    // blobs that aren't valid JSON or aren't typed correctly, so the
-    // structured passes above miss them. This catches everything left.
-    if (posts.length === 0 && hiringBanner) {
-        console.log('🟢 LRI: All structured methods empty — running raw URN scan');
+    // jobPosting URN or /jobs/view/<id> reference. The 2024 redesign hides
+    // job IDs in <code>/<script> blobs and JSON strings that aren't picked
+    // up by the structured passes above.
+    //
+    // Always runs (even if hiringBanner wasn't detected) — banner detection
+    // misses many of LinkedIn's newer hiring section variants.
+    if (posts.length === 0) {
+        console.log('🟢 LRI: All structured methods empty — running raw HTML scan');
         try {
+            // Trigger lazy-loaded content: scroll to bottom and back, then re-query
+            try {
+                window.scrollTo(0, document.body.scrollHeight);
+                await sleep(800);
+                window.scrollTo(0, 0);
+                await sleep(300);
+            } catch (_) {}
+
             const html = document.documentElement.outerHTML;
             const seen = new Set();
-            const rx = /urn:li:(?:fsd_)?jobPosting:(\d{6,})/g;
+
+            // Pattern A: jobPosting URN (most reliable)
+            const urnRx = /urn:li:(?:fsd_)?(?:jobPosting|jobs):(\d{6,})/g;
             let m;
-            while ((m = rx.exec(html)) !== null) {
+            while ((m = urnRx.exec(html)) !== null) {
                 const id = m[1];
                 if (seen.has(id)) continue;
                 seen.add(id);
+            }
+
+            // Pattern B: /jobs/view/<id> in any href / JSON string
+            const viewRx = /\/jobs\/view\/(\d{6,})/g;
+            while ((m = viewRx.exec(html)) !== null) {
+                const id = m[1];
+                if (seen.has(id)) continue;
+                seen.add(id);
+            }
+
+            // Pattern C: jobPostingCardUnion / jobPostingId
+            const cardRx = /["']jobPostingId["']\s*:\s*["']?(\d{6,})/g;
+            while ((m = cardRx.exec(html)) !== null) {
+                const id = m[1];
+                if (seen.has(id)) continue;
+                seen.add(id);
+            }
+
+            for (const id of seen) {
                 posts.push({
                     jobId: id,
-                    title: '(title unavailable — pull from job page on enrich)',
+                    title: '(title unavailable — enrich step will fill it)',
                     company: null,
                     location: null,
                     postedAt: null,
@@ -845,11 +885,14 @@ async function extractHiringPosts(voyagerData) {
                     source: 'urn_scan'
                 });
             }
+
             if (posts.length > 0) {
-                console.log(`🟢 LRI: Raw URN scan recovered ${posts.length} job(s)`);
+                console.log(`🟢 LRI: Raw HTML scan recovered ${posts.length} job(s)`);
+            } else {
+                console.log('🟢 LRI: No job IDs found anywhere in page HTML — likely a profile with no active hiring posts');
             }
         } catch (err) {
-            console.warn('⚠️ LRI: Raw URN scan failed:', err.message);
+            console.warn('⚠️ LRI: Raw HTML scan failed:', err.message);
         }
     }
 
@@ -944,8 +987,16 @@ function findHiringBanner() {
     for (const el of candidates) {
         const text = (el.innerText || '').trim();
         if (text.length > 800 || text.length < 5) continue;
-        // Match BOTH "Show 5 jobs" and the singular "Show job" (when only 1 opening exists)
-        if (text.match(/^Hiring:/i) || text.match(/\bShow\s+(\d+\s+)?jobs?\b/i)) {
+        // Match wide variety of hiring-banner phrasings LinkedIn uses
+        if (
+            text.match(/^Hiring:/i) ||                    // "Hiring: <title>"
+            text.match(/\bis hiring\b/i) ||                // "<X> is hiring"
+            text.match(/\bShow\s+(\d+\s+)?jobs?\b/i) ||    // "Show job" / "Show 5 jobs"
+            text.match(/\b(\d+)\s+open roles?\b/i) ||      // "5 open roles"
+            text.match(/\b(\d+)\s+active hiring posts?\b/i) ||
+            text.match(/^See\s+(\d+\s+)?jobs?\b/i) ||      // "See 3 jobs"
+            text.match(/\bView\s+(\d+\s+)?(?:open\s+)?jobs?\b/i)
+        ) {
             return el;
         }
     }
