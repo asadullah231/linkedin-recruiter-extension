@@ -128,11 +128,16 @@ async function extractProfileData() {
 
     // ── Final guard: even if voyager passed and we ended up with a name,
     // make sure it's NOT the logged-in user's name. If it is, prefer DOM.
+    // Also normalise to strip LinkedIn UI artefacts like "(1) " prefixes.
     let chosenFullName = vp?.firstName
         ? `${vp.firstName} ${vp.lastName || ''}`.trim()
         : domData.fullName;
     let chosenFirstName = vp?.firstName || domData.firstName;
     let chosenLastName  = vp?.lastName  || domData.lastName;
+
+    chosenFullName  = normalizeProfileName(chosenFullName)  || chosenFullName;
+    chosenFirstName = normalizeProfileName(chosenFirstName) || chosenFirstName;
+    chosenLastName  = normalizeProfileName(chosenLastName)  || chosenLastName;
     if (myName && chosenFullName && chosenFullName.toLowerCase() === myName.toLowerCase()) {
         console.warn('🟡 LRI: Final-guard rejected name = logged-in user (' + chosenFullName + '), falling back');
         // If DOM name is also = logged-in user (or empty), null everything.
@@ -345,15 +350,19 @@ function extractDomData() {
 
     for (const cand of candidates) {
         if (!cand) continue;
-        if (cand.length < 2 || cand.length > 80) continue;
-        if (/^linkedin/i.test(cand)) continue;
-        if (/^(view|message|follow|connect|edit|premium)/i.test(cand)) continue;
+        // ── Normalise: strip notification badges that LinkedIn injects into
+        // the browser tab title, e.g. "(1) Maria Robillard - …" ──
+        const clean = normalizeProfileName(cand);
+        if (!clean) continue;
+        if (clean.length < 2 || clean.length > 80) continue;
+        if (/^linkedin/i.test(clean)) continue;
+        if (/^(view|message|follow|connect|edit|premium)/i.test(clean)) continue;
         // Reject if it's the logged-in user's name (the bug we're fixing)
-        if (meRx && meRx.test(cand)) {
-            console.warn('🟡 LRI: Rejected name candidate (matches logged-in user):', cand);
+        if (meRx && meRx.test(clean)) {
+            console.warn('🟡 LRI: Rejected name candidate (matches logged-in user):', clean);
             continue;
         }
-        data.fullName = cand.replace(/\s+/g, ' ');
+        data.fullName = clean;
         break;
     }
 
@@ -533,6 +542,25 @@ function getLoggedInUserName() {
 
 function cleanName(s) {
     return String(s).replace(/\s+/g, ' ').trim();
+}
+
+// Strip LinkedIn UI artefacts that bleed into name extraction:
+//   "(1) Maria Robillard"          ← unread-notification counter on tab title
+//   "(99+) John Doe"               ← capped counter variant
+//   "•  Maria Robillard"           ← LinkedIn online-status dot
+//   "  Maria Robillard •"          ← trailing dot
+//   "Maria Robillard | LinkedIn"   ← page-title brand suffix slipped in
+function normalizeProfileName(s) {
+    if (!s) return null;
+    let n = String(s).trim();
+    // leading "(N)" or "(N+)" notification badge
+    n = n.replace(/^\s*\(\s*\d+\+?\s*\)\s*/, '');
+    // leading/trailing online-presence dots / pipes
+    n = n.replace(/^[•·•|\s]+|[•·•|\s]+$/g, '');
+    // strip trailing "| LinkedIn" or " - LinkedIn" if it slipped through
+    n = n.replace(/\s*[-|]\s*LinkedIn\s*$/i, '');
+    n = n.replace(/\s+/g, ' ').trim();
+    return n || null;
 }
 
 function extractNameFromTitle() {

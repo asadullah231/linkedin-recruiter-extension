@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Recruiter Intelligence",
-  "version": "0.18.4",
+  "version": "0.18.5",
   "description": "n8n-driven LinkedIn recruiter scraper. Auto-pulls URLs from your n8n workflow, scrapes profiles + hiring posts, posts results back automatically.",
 
   "permissions": [
