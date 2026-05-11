@@ -862,9 +862,14 @@ async function extractHiringPosts(voyagerData) {
     // the modal contents on click for profiles with 2+ open roles, and
     // the click is React-isTrusted-gated, so we can't fake it. We try a
     // sequence of URLs that sometimes contain the same SSR data.
-    if (posts.length === 0) {
+    //
+    // Runs whenever a hiring banner was detected — even if we already
+    // got SOME jobs (banner sometimes renders only the first one inline
+    // and hides the rest behind 'Show N jobs', so we still need to fetch
+    // to get the complete list).
+    if (hiringBanner || posts.length === 0) {
         const slug = extractPublicIdentifier(window.location.href);
-        console.log('🟢 LRI: Posts still 0 — trying URL fallbacks for slug:', slug);
+        console.log('🟢 LRI: Running URL fallbacks — current posts:', posts.length, 'slug:', slug);
 
         if (slug) {
             // ── Try: harvest the actual "Show N jobs" element href if any ──
@@ -917,7 +922,12 @@ async function extractHiringPosts(voyagerData) {
                 }
             }
 
+            // Dedupe against jobs we already harvested from the banner /
+            // inline / activity passes — only ADD truly new IDs.
+            const existingIds = new Set(posts.map(p => p.jobId).filter(Boolean));
+            let added = 0;
             for (const id of seen) {
+                if (existingIds.has(id)) continue;
                 posts.push({
                     jobId: id,
                     title: '(title unavailable — enrich step will fill it)',
@@ -927,18 +937,22 @@ async function extractHiringPosts(voyagerData) {
                     jobUrl: `https://www.linkedin.com/jobs/view/${id}`,
                     source: 'recent_activity_fetch'
                 });
+                added++;
             }
-            if (posts.length > 0) {
-                console.log(`🟢 LRI: URL-fetch recovered ${posts.length} job(s)`);
+            if (added > 0) {
+                console.log(`🟢 LRI: URL-fetch added ${added} NEW job(s) (total now ${posts.length})`);
+            } else if (seen.size > 0) {
+                console.log(`🟢 LRI: URL-fetch found ${seen.size} ID(s) — all already in posts`);
             }
         }
     }
 
     // Method 5 (LAST RESORT): scan the raw page HTML for any LinkedIn
-    // jobPosting URN or /jobs/view/<id> reference. Runs only if Method 5.5
-    // also came up empty.
-    if (posts.length === 0) {
-        console.log('🟢 LRI: All structured methods empty — running raw HTML scan');
+    // jobPosting URN or /jobs/view/<id> reference. Runs whenever a hiring
+    // banner was seen OR posts is still empty, so we sweep up any IDs the
+    // earlier methods missed even when we already got a few.
+    if (hiringBanner || posts.length === 0) {
+        console.log('🟢 LRI: Running raw HTML scan — current posts:', posts.length);
         try {
             // Trigger lazy-loaded content: scroll to bottom and back, then re-query
             try {
@@ -976,7 +990,10 @@ async function extractHiringPosts(voyagerData) {
                 seen.add(id);
             }
 
+            const existingIds = new Set(posts.map(p => p.jobId).filter(Boolean));
+            let added = 0;
             for (const id of seen) {
+                if (existingIds.has(id)) continue;
                 posts.push({
                     jobId: id,
                     title: '(title unavailable — enrich step will fill it)',
@@ -986,12 +1003,13 @@ async function extractHiringPosts(voyagerData) {
                     jobUrl: `https://www.linkedin.com/jobs/view/${id}`,
                     source: 'urn_scan'
                 });
+                added++;
             }
 
-            if (posts.length > 0) {
-                console.log(`🟢 LRI: Raw HTML scan recovered ${posts.length} job(s)`);
-            } else {
-                console.log('🟢 LRI: No job IDs found anywhere in page HTML — likely a profile with no active hiring posts');
+            if (added > 0) {
+                console.log(`🟢 LRI: Raw HTML scan added ${added} NEW job(s) (total now ${posts.length})`);
+            } else if (posts.length === 0) {
+                console.log('🟢 LRI: No job IDs found anywhere in page HTML — profile likely has no active hiring posts');
             }
         } catch (err) {
             console.warn('⚠️ LRI: Raw HTML scan failed:', err.message);
