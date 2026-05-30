@@ -19,6 +19,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadProfiles();
     setupTabSwitching();
     setupEventListeners();
+
+    // ── Hard-enforce minimum delay of 7s — snap back if user types less ──
+    const delayInput = document.getElementById('opt-delay');
+    if (delayInput) {
+        delayInput.addEventListener('change', () => {
+            if (parseInt(delayInput.value) < 7) {
+                delayInput.value = 7;
+            }
+        });
+        delayInput.addEventListener('blur', () => {
+            if (parseInt(delayInput.value) < 7) {
+                delayInput.value = 7;
+            }
+        });
+    }
     await syncBulkState();
     setupBulkProgressListener();
     await loadN8nSettings();
@@ -245,7 +260,9 @@ async function startBulkScrape() {
         if (!confirm(`${urls.length} URLs queued. This will take ~${Math.round(urls.length * 0.5)} hours. Continue?`)) return;
     }
 
-    const delay = parseInt(document.getElementById('opt-delay').value) || 15;
+    const MIN_DELAY = 7;
+    const delay = Math.max(MIN_DELAY, parseInt(document.getElementById('opt-delay').value) || MIN_DELAY);
+    document.getElementById('opt-delay').value = delay; // snap back if user typed less than 7
     const enrichJobs = document.getElementById('opt-enrich-jobs').checked;
 
     // Show progress UI

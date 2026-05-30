@@ -11,7 +11,7 @@
 // Load SheetJS for XLSX generation in service worker
 try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
 
-console.log('🟢 LRI Background v0.17.0 loaded');
+console.log('🟢 LRI Background v0.18.7 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -19,7 +19,7 @@ let bulkState = {
     queue: [],
     totalUrls: 0,
     currentIndex: 0,
-    delay: 15,
+    delay: 7,
     enrichJobs: true,
     activeTabId: null,
     pendingProfileResolve: null,
@@ -125,6 +125,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ═══════════════════════════════════════════════════════════════════════
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+    // ── SW KEEPALIVE: just waking up prevents the service worker sleeping mid-batch ──
+    if (alarm.name === 'sw-keepalive') {
+        console.log('💓 SW keepalive tick');
+        return;
+    }
+
     if (alarm.name !== 'auto-pull') return;
     if (bulkState.isRunning) {
         console.log('🤖 Auto-pull skipped: scrape already running');
@@ -164,7 +170,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
         console.log(`🤖 Auto-pull: ${urls.length} valid URLs → starting scrape`);
         console.log('First URL:', urls[0]);
-        await startBulkScrape(urls, { delay: 6, enrichJobs: false });
+        await startBulkScrape(urls, { delay: 7, enrichJobs: false });
     } catch (err) {
         console.error('🤖 Auto-pull error:', err);
     }
@@ -258,7 +264,7 @@ async function startBulkScrape(urls, options) {
         queue: urls,
         totalUrls: urls.length,
         currentIndex: 0,
-        delay: options.delay || 15,
+        delay: options.delay || 7,
         enrichJobs: options.enrichJobs !== false,
         activeTabId: null,
         pendingProfileResolve: null,
@@ -280,6 +286,9 @@ async function startBulkScrape(urls, options) {
 async function runBulkQueue() {
     let savedCount = 0;
     let skippedCount = 0;
+
+    // ── SW KEEPALIVE: ping every 25s so service worker never sleeps mid-batch ──
+    chrome.alarms.create('sw-keepalive', { periodInMinutes: 25 / 60 });
 
     for (let i = 0; i < bulkState.queue.length; i++) {
         if (!bulkState.isRunning) {
@@ -364,6 +373,15 @@ async function runBulkQueue() {
             await sleep(wait);
         }
     }
+
+    // ── Close the reused tab when batch is fully done ──
+    if (bulkState.activeTabId) {
+        chrome.tabs.remove(bulkState.activeTabId).catch(() => {});
+        bulkState.activeTabId = null;
+    }
+
+    // ── Stop keepalive alarm ──
+    chrome.alarms.clear('sw-keepalive');
 
     bulkState.isRunning = false;
     bulkLog(`✅ Done! Saved ${savedCount}, skipped ${skippedCount} of ${bulkState.totalUrls}`, 'success');
@@ -466,32 +484,40 @@ async function filterClosedJobs() {
         const posts = profile.hiringPosts || [];
         if (posts.length === 0) continue;
 
-        const survivors = [];
-        for (const job of posts) {
-            if (!job.jobUrl) {
-                survivors.push(job);
-                continue;
-            }
+        // ── CONCURRENT: check up to 5 jobs in parallel (5× faster than sequential) ──
+        const BATCH = 5;
+        const results = [];
 
-            try {
-                const closed = await isJobClosed(job.jobUrl);
-                if (closed) {
-                    removed++;
-                    bulkLog(`  ⏭ Closed:  ${(job.title || 'Untitled').substring(0, 70)}`, 'info');
-                } else {
-                    survivors.push(job);
-                    kept++;
-                    bulkLog(`  ✅ Live:    ${(job.title || 'Untitled').substring(0, 70)}`, 'success');
+        for (let i = 0; i < posts.length; i += BATCH) {
+            const batch = posts.slice(i, i + BATCH);
+            const batchResults = await Promise.all(batch.map(async (job) => {
+                if (!job.jobUrl) return { job, closed: false };
+                try {
+                    const closed = await isJobClosed(job.jobUrl);
+                    return { job, closed };
+                } catch (err) {
+                    return { job, closed: false, hadError: true, errMsg: err.message };
                 }
-            } catch (err) {
-                // Network/parse error → keep the job (fail-open) but flag
-                survivors.push(job);
-                errored++;
-                bulkLog(`  ⚠️ Check failed (kept): ${(job.title || 'Untitled').substring(0, 50)} — ${err.message.substring(0, 50)}`, 'error');
-            }
+            }));
+            results.push(...batchResults);
+            // Small pause between batches — polite to LinkedIn
+            if (i + BATCH < posts.length) await sleep(300);
+        }
 
-            // Polite throttle
-            await sleep(200);
+        const survivors = [];
+        for (const { job, closed, hadError, errMsg } of results) {
+            if (hadError) {
+                survivors.push(job); // fail-open
+                errored++;
+                bulkLog(`  ⚠️ Check failed (kept): ${(job.title || 'Untitled').substring(0, 50)} — ${(errMsg || '').substring(0, 50)}`, 'error');
+            } else if (closed) {
+                removed++;
+                bulkLog(`  ⏭ Closed:  ${(job.title || 'Untitled').substring(0, 70)}`, 'info');
+            } else {
+                survivors.push(job);
+                kept++;
+                bulkLog(`  ✅ Live:    ${(job.title || 'Untitled').substring(0, 70)}`, 'success');
+            }
         }
 
         profile.hiringPosts = survivors;
@@ -867,45 +893,62 @@ function buildXlsxBlob(profiles) {
 
 async function scrapeProfileInTab(url) {
     return new Promise(async (resolve) => {
-        let tabId = null;
+        // ── TAB REUSE: don't close tab on resolve — we navigate it to the next URL ──
         const timeout = setTimeout(() => {
-            if (tabId) chrome.tabs.remove(tabId).catch(() => {});
             bulkState.pendingProfileResolve = null;
             resolve(null);
         }, 60000); // 60s max
 
         bulkState.pendingProfileResolve = (data) => {
             clearTimeout(timeout);
-            if (tabId) {
-                setTimeout(() => chrome.tabs.remove(tabId).catch(() => {}), 1000);
-            }
+            // NOTE: we do NOT remove the tab here — it gets reused for next profile
             resolve(data);
         };
 
         try {
-            const tab = await chrome.tabs.create({ url, active: false });
-            tabId = tab.id;
-            bulkState.activeTabId = tabId;
+            // ── Reuse existing tab if still alive, else create a fresh one ──
+            let tabId = bulkState.activeTabId;
+            if (tabId) {
+                try {
+                    await chrome.tabs.get(tabId);           // throws if tab was closed
+                    await chrome.tabs.update(tabId, { url }); // navigate instead of new tab
+                } catch {
+                    tabId = null; // tab gone — fall through to create
+                }
+            }
+            if (!tabId) {
+                const tab = await chrome.tabs.create({ url, active: false });
+                tabId = tab.id;
+                bulkState.activeTabId = tabId;
+            }
 
             // Wait for page to load + content script to inject
-            // Then auto-trigger save by injecting a click on the floating button
             await waitForTabComplete(tabId, 30000);
-            await sleep(4000); // Extra time for SPA + voyager data
+            await sleep(2000); // ✂ Reduced 4s → 2s (SPA + voyager data loads faster)
 
-            // Trigger the save by executing a script that clicks the button
+            // Trigger save — wait for button to actually appear (up to 5s extra)
             await chrome.scripting.executeScript({
                 target: { tabId },
                 func: () => {
-                    const btn = document.getElementById('lri-save-button');
-                    if (btn) btn.click();
+                    return new Promise((resolve) => {
+                        const tryClick = (attempts) => {
+                            const btn = document.getElementById('lri-save-button');
+                            if (btn) {
+                                btn.click();
+                                return resolve('clicked');
+                            }
+                            if (attempts <= 0) return resolve('timeout');
+                            setTimeout(() => tryClick(attempts - 1), 300);
+                        };
+                        tryClick(16); // up to 4.8s extra wait
+                    });
                 }
             });
 
-            // Now wait for pendingProfileResolve to be called by the saveProfile message
+            // Wait for pendingProfileResolve to be called by the saveProfile message
         } catch (err) {
             clearTimeout(timeout);
             bulkState.pendingProfileResolve = null;
-            if (tabId) chrome.tabs.remove(tabId).catch(() => {});
             resolve(null);
         }
     });
