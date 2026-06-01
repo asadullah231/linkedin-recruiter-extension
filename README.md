@@ -228,4 +228,4 @@ If something breaks, check:
 
 ---
 
-**Built for AsadUllah — LinkedIn Recruiter Intelligence MVP v0.1.0**
+**Built for AsadUllah — LinkedIn Recruiter Intelligence v0.18.7 · ⚡ Speed Optimized**
