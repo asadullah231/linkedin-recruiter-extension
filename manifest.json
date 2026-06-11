@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Recruiter Intelligence",
-  "version": "0.18.7",
-  "description": "n8n-driven LinkedIn recruiter scraper. Auto-pulls URLs from your n8n workflow, scrapes profiles + hiring posts, posts results back automatically.",
+  "version": "0.19.0",
+  "description": "n8n-driven LinkedIn recruiter scraper. Multi-tenant: each teammate sets a Team ID, pulls only their own URLs, and results are tagged per owner. Scrapes profiles + hiring posts, posts results back automatically.",
 
   "permissions": [
     "storage",

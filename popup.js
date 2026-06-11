@@ -534,11 +534,16 @@ async function loadN8nSettings() {
         pullUrl: N8N_PULL_URL,
         callbackUrl: N8N_CALLBACK_URL,
         apiKey: n8nSettings.apiKey || '',
+        owner: (n8nSettings.owner || '').trim().toLowerCase(),  // ← teammate identity
         autoPull: !!n8nSettings.autoPull,   // ← user toggle (default false)
         autoSend: true,                      // always ON
         stopAfterBatch: true                 // always ON
     };
     await chrome.storage.local.set({ n8nSettings: merged });
+
+    // ── Team ID (owner) field ──
+    const ownerEl = document.getElementById('owner-id');
+    if (ownerEl) ownerEl.value = merged.owner;
 
     // Closed-jobs filter is always ON
     aiSettings.filterClosed = true;
@@ -612,6 +617,9 @@ function setupN8nListeners() {
     const emergencyBtn = document.getElementById('btn-emergency-stop');
     if (emergencyBtn) emergencyBtn.addEventListener('click', emergencyStop);
 
+    const ownerEl = document.getElementById('owner-id');
+    if (ownerEl) ownerEl.addEventListener('change', saveOwner);
+
     // Save AI section automatically when its inputs change (since the dedicated Save button is gone)
     const aiInputs = ['ai-api-key', 'ai-model', 'ai-enabled'];
     for (const id of aiInputs) {
@@ -641,11 +649,20 @@ async function saveN8nSettings() {
     n8nLog(`💾 AI settings saved.${aiSettings.enabled ? ' 🤖 AI ranking ENABLED.' : ''}`, 'success');
 }
 
+async function saveOwner() {
+    const owner = (document.getElementById('owner-id')?.value || '').trim().toLowerCase();
+    const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
+    n8nSettings.owner = owner;
+    await chrome.storage.local.set({ n8nSettings });
+    n8nLog(owner ? `👤 Team ID set: ${owner}` : '⚠️ Team ID cleared — pull will be unscoped!', owner ? 'success' : 'error');
+}
+
 function getN8nSettings() {
     return {
         pullUrl: N8N_PULL_URL,
         callbackUrl: N8N_CALLBACK_URL,
-        apiKey: document.getElementById('n8n-api-key')?.value.trim() || ''
+        apiKey: document.getElementById('n8n-api-key')?.value.trim() || '',
+        owner: (document.getElementById('owner-id')?.value || '').trim().toLowerCase()
     };
 }
 
@@ -656,16 +673,21 @@ function buildN8nHeaders(apiKey, contentType = 'application/json') {
 }
 
 async function pullFromN8n() {
-    const { pullUrl, apiKey } = getN8nSettings();
+    const { pullUrl, apiKey, owner } = getN8nSettings();
     if (!pullUrl) {
         n8nLog('❌ Pull URL not configured.', 'error');
         return;
     }
+    if (!owner) {
+        n8nLog('❌ Team ID (owner) is empty — please set your Team ID first.', 'error');
+        return;
+    }
 
-    n8nLog(`📥 Fetching from ${pullUrl}...`, 'info');
+    const scopedUrl = `${pullUrl}?owner=${encodeURIComponent(owner)}`;
+    n8nLog(`📥 Fetching ${owner}'s URLs from ${pullUrl}...`, 'info');
 
     try {
-        const res = await fetch(pullUrl, {
+        const res = await fetch(scopedUrl, {
             method: 'GET',
             headers: buildN8nHeaders(apiKey)
         });

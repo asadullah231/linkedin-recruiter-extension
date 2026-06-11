@@ -65,6 +65,15 @@
         <div class="bulk-section">
 
             <!-- ────────────────────────────────────────────── -->
+            <!-- TEAM IDENTITY — owner (scopes pull + tags rows) -->
+            <!-- ────────────────────────────────────────────── -->
+            <div class="input-group" style="margin-bottom:12px">
+                <label>👤 Your Team ID (owner):</label>
+                <input type="text" id="owner-id" placeholder="e.g. mahmoud, usman" autocomplete="off" />
+                <small class="hint-small">Only your URLs will be pulled, and results are tagged to your name. (all lowercase, no spaces)</small>
+            </div>
+
+            <!-- ────────────────────────────────────────────── -->
             <!-- AUTO MODE — MASTER TOGGLE                       -->
             <!-- ────────────────────────────────────────────── -->
             <div class="auto-mode-banner" id="auto-mode-banner">
@@ -182,7 +191,7 @@
     </div>
 
     <footer>
-        <p>LinkedIn Recruiter Intelligence v0.18.7 · ⚡ Speed Optimized</p>
+        <p>LinkedIn Recruiter Intelligence v0.19.0 · 👥 Multi-tenant</p>
     </footer>
 
     <script src="popup.js"></script>

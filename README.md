@@ -1,9 +1,10 @@
-# 🎯 LinkedIn Recruiter Intelligence — MVP
+# 🎯 LinkedIn Recruiter Intelligence — v0.19.0
 
-Capture recruiter profiles + their **active hiring posts** (the specific jobs they're working on) directly from LinkedIn while you browse.
+n8n-driven, **multi-tenant** LinkedIn recruiter scraper. Each teammate sets a **Team ID (owner)**; the extension auto-pulls only *their* queued profiles from n8n, scrapes profiles + active hiring posts, and posts owner-tagged results back automatically — so 5–50 teammates can work at once without their data ever mixing.
 
-## ✨ Features (v0.3.0)
+## ✨ Features (v0.19.0)
 
+- ✅ 👥 **Multi-tenant** — set a Team ID (owner); each teammate pulls only their own URLs and results are tagged per owner
 - ✅ **Floating "Save Profile" button** on every LinkedIn profile page
 - ✅ Extracts profile data: name, headline, location, current company, about
 - ✅ ⭐ **Hiring posts extraction** — the specific jobs the recruiter is actively working on
@@ -228,4 +229,4 @@ If something breaks, check:
 
 ---
 
-**Built for AsadUllah — LinkedIn Recruiter Intelligence v0.18.7 · ⚡ Speed Optimized**
+**LinkedIn Recruiter Intelligence v0.19.0 · 👥 Multi-tenant · ⚡ Speed Optimized**

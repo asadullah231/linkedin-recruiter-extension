@@ -11,7 +11,7 @@
 // Load SheetJS for XLSX generation in service worker
 try { importScripts('lib/xlsx.full.min.js'); } catch (e) { console.error('XLSX lib load failed:', e); }
 
-console.log('🟢 LRI Background v0.18.7 loaded');
+console.log('🟢 LRI Background v0.19.0 loaded');
 
 // In-memory bulk scrape state (resets on service worker restart)
 let bulkState = {
@@ -140,11 +140,17 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     try {
         const { n8nSettings = {} } = await chrome.storage.local.get('n8nSettings');
         if (!n8nSettings.autoPull || !n8nSettings.pullUrl) return;
+        if (!n8nSettings.owner) {
+            console.warn('🤖 Auto-pull skipped: Team ID (owner) not set');
+            return;
+        }
 
         const headers = { 'Content-Type': 'application/json' };
         if (n8nSettings.apiKey) headers['Authorization'] = `Bearer ${n8nSettings.apiKey}`;
 
-        const res = await fetch(n8nSettings.pullUrl, { method: 'GET', headers });
+        // ── Scope the pull to THIS teammate only (multi-tenant) ──
+        const pullUrl = `${n8nSettings.pullUrl}?owner=${encodeURIComponent(n8nSettings.owner)}`;
+        const res = await fetch(pullUrl, { method: 'GET', headers });
         if (!res.ok) {
             console.log(`🤖 Auto-pull HTTP ${res.status}`);
             return;
@@ -458,7 +464,8 @@ async function streamProfileToN8n(profileData) {
         headers,
         body: JSON.stringify({
             source: 'linkedin-recruiter-extension',
-            version: '0.17.0',
+            version: '0.19.0',
+            owner: n8nSettings.owner || '',   // ← who scraped this (for result tagging)
             timestamp: new Date().toISOString(),
             profile: profileData
         })
