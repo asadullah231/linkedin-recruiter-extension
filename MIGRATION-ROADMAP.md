@@ -140,7 +140,7 @@ Typed, testable storage layer — replaces raw `chrome.storage.local.get/set`.
 
 ---
 
-## Milestone 3 — Background Service Worker (Days 4–5)
+## Milestone 3 — Background Service Worker ✅ COMPLETE (Days 4–5)
 
 **Goal:** Migrate all `bg-*.js` files to typed TypeScript ES modules.
 
@@ -159,32 +159,38 @@ background.js             →  src/entrypoints/background.ts
 ### Tasks
 
 **Day 4 — Core modules**
-- [ ] `state.ts` — typed `BulkState`, constants
-- [ ] `utils.ts` — `sleep()`, `shortUrl()`, `extractUrls()`, `bulkLog()`, `updateBadge()`
-- [ ] `scraper.ts` — `scrapeProfileInTab()`, `scrapeJobInTab()`, `waitForTabComplete()`
-- [ ] `n8n.ts` — `streamProfileToN8n()`, `sendBulkResultsToN8n()` with typed payloads
+- [x] `state.ts` — typed `BulkState`, `resetBulkState()` (mutates in place — see note)
+- [x] `utils.ts` — `sleep()`, `shortUrl()`, `extractUrls()`, `bulkLog()`, `updateBadge()`
+- [x] `scraper.ts` — `scrapeProfileInTab()`, `scrapeJobInTab()`, `waitForTabComplete()`
+- [x] `n8n.ts` — `streamProfileToN8n()`, `sendBulkResultsToN8n()` with typed payloads
 
 **Day 5 — Orchestration modules**
-- [ ] `exporter.ts` — `buildXlsxBlob()` with proper dynamic import:
-  ```ts
-  async function buildXlsxBlob(profiles: RecruiterProfile[]): Promise<Blob> {
-    const XLSX = await import('xlsx'); // proper lazy load — no importScripts hack
-    ...
-  }
-  ```
-- [ ] `ai.ts` — `filterClosedJobs()`, `rankTopJobsWithAI()`, `callOpenRouterForTopJob()`
-- [ ] `bulk.ts` — `startBulkScrape()`, `runBulkQueue()` with circuit breaker (already added in v0.19.0)
-- [ ] `background.ts` entrypoint — replaces `background.js`:
-  ```ts
-  export default defineBackground(() => {
-    chrome.runtime.onMessage.addListener(handleMessage);
-    chrome.alarms.onAlarm.addListener(handleAlarm);
-    chrome.runtime.onInstalled.addListener(handleInstall);
-  });
-  ```
+- [x] `exporter.ts` — `pickTopJob()` + `buildXlsxBlob()` with proper `await import('xlsx')`
+- [x] `ai.ts` — `filterClosedJobs()`, `isJobClosed()`, `rankTopJobsWithAI()`, `callOpenRouterForTopJob()`
+- [x] `bulk.ts` — `startBulkScrape()`, `runBulkQueue()` with circuit breaker
+- [x] `background.ts` entrypoint — replaces `background.js` (message/alarm/install/startup listeners)
 
-### Deliverable
+### Deliverable ✅
 Full background service worker in TypeScript. All `importScripts()` gone.
+
+**Notes**
+- Added `src/types/messages.ts` — `RuntimeMessage` discriminated union + `BulkStateSnapshot`
+  / `BulkProgressMessage`, so the message handler is fully typed.
+- `bulkState` is now a single mutable object mutated in place by `resetBulkState()`.
+  ES module imports are read-only bindings, so the old "reassign the global" pattern
+  isn't possible — every module keeps a live reference to the same object instead.
+- Reconciled `BulkLogEntry` to the real runtime shape `{ time, message, type }`
+  (the M1 stub had guessed `{ timestamp, level, message }`).
+- Fixed n8n endpoint URLs are sourced from `settings.ts` constants; the worker no
+  longer persists `pullUrl`/`callbackUrl` into storage (they're code constants now).
+- Verified: `npm run type-check` exit 0, `npm run build` exit 0. `background.js`
+  went 704 B → **28.7 KB** (logic added) — XLSX is NOT bundled into the worker.
+- XLSX lazy chunk: `buildXlsxBlob` is only reached via `sendBulkResultsToN8n`
+  (manual "Send Now"), which nothing calls yet, so Vite currently tree-shakes the
+  xlsx dynamic import out entirely. The separate chunk will emit once M5 wires the
+  Export tab — the lazy-load architecture is correct.
+- `job-scraper.js` injection path is kept as a string ref; the entrypoint that
+  produces that file is built in M4.
 
 ---
 
@@ -208,28 +214,38 @@ job-scraper.js             →  src/entrypoints/job-scraper.ts
 ### Tasks
 
 **Day 6 — Extractors**
-- [ ] `content-utils.ts` — shared helpers, `extractPublicIdentifier()`, `getLoggedInUserName()`
-- [ ] `profile-extractor.ts` — `extractVoyagerData()`, `extractDomData()`, returns `Partial<RecruiterProfile>`
-- [ ] `jobs-extractor.ts` — `extractHiringPosts()`, returns `HiringPost[]`
+- [x] `content-utils.ts` — `q`/`qq`/`sleep`, `extractPublicIdentifier()`, `extractPicUrl()`, `cleanName()`, `normalizeProfileName()`, `getLoggedInUserName()`
+- [x] `profile-extractor.ts` — `extractProfileData()` (returns `ScrapedProfile`), `extractVoyagerData()`, `extractDomData()` + meta/title fallbacks
+- [x] `jobs-extractor.ts` — `extractHiringPosts()` (returns `HiringPost[]`) + all 5 fallback methods, modal handling, `parseJobFromLink()`
 
 **Day 7 — UI + Entrypoints**
-- [ ] `ui.ts` — `injectFloatingButton()`, button state machine (loading/success/error)
-- [ ] `content.ts` entrypoint — thin orchestrator:
-  ```ts
-  export default defineContentScript({
-    matches: ['https://www.linkedin.com/in/*'],
-    runAt: 'document_idle',
-    main() {
-      injectFloatingButton();
-      observeNavigation(); // SPA nav handling
-    }
-  });
-  ```
-- [ ] `job-scraper.ts` entrypoint — for job enrichment tab
-- [ ] Test: manually open 5 LinkedIn profiles, verify save button appears and works
+- [x] `ui.ts` — `injectFloatingButton()`, button state machine (loading/success/error), `observeNavigation()`, `initContentScript()`
+- [x] `content.ts` entrypoint — thin orchestrator (`initContentScript()`) + `import '../content/content.css'`
+- [x] `job-scraper.ts` entrypoint — `defineUnlistedScript`, builds to `job-scraper.js`
+- [ ] Manual test on live LinkedIn profiles — deferred to M7 QA (needs a logged-in browser)
 
-### Deliverable
+### Deliverable ✅
 Content scripts fully typed. Old `content.js` monolith retired.
+
+**Notes**
+- Verified the shipped `content.js` monolith and the `content/*.js` split files have
+  an identical function set — the split files were a faithful decomposition, so they
+  were used as the port basis.
+- Extended the type contracts to match real extraction output: widened
+  `HiringPost` (added `jobId`, `company`, `companyLinkedinUrl`, `postedAt`,
+  `applicants`, nullable fields) and `HiringPostSource` (8 real source tags);
+  added `src/types/extraction.ts` with `ScrapedProfile`, `VoyagerData`, `DomData`,
+  `JobDetails`. `JobDetails` now flows through `scrapeJobInTab` / `pendingJobResolve`.
+- `content.css` copied to `src/content/content.css` and imported by the entrypoint —
+  WXT bundles it as the content script's `css` automatically.
+- `job-scraper.js` added to `web_accessible_resources` so the background can inject it.
+- Two deliberate, behaviour-neutral deviations: (1) `fullName` null (total extraction
+  failure) is coerced to `''` at the extractor boundary to keep the canonical type
+  non-null — downstream already does `fullName || 'Unknown'`; (2) the job-scraper
+  message drops the unused `jobUrl`/`error` fields (background only reads `data`).
+- Verified: `npm run type-check` exit 0, `npm run build` exit 0.
+  Outputs: `content.js` 34.5 KB, `content.css` 1.47 KB, `job-scraper.js` 4.24 KB.
+  Generated manifest correctly lists the content script (js+css) and WAR.
 
 ---
 

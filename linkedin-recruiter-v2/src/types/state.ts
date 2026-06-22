@@ -7,16 +7,17 @@
  */
 
 import type { RecruiterProfile } from './profile';
+import type { JobDetails } from './extraction';
 
 /** Severity of a bulk log line, used for popup colour coding. */
 export type BulkLogLevel = 'info' | 'success' | 'error';
 
-/** A single entry in the live bulk-scrape log feed. */
+/** A single entry in the live bulk-scrape log feed (shape matches bg-utils.js bulkLog). */
 export interface BulkLogEntry {
-  message: string;
-  level: BulkLogLevel;
   /** ISO 8601 timestamp of when the line was emitted. */
-  timestamp: string;
+  time: string;
+  message: string;
+  type: BulkLogLevel;
 }
 
 /** In-memory state machine for the bulk scrape run. */
@@ -33,9 +34,9 @@ export interface BulkState {
   /** Tab currently driving the scrape, or null when idle. */
   activeTabId: number | null;
   /** Resolver for the in-flight profile scrape promise. */
-  pendingProfileResolve: ((profile: Partial<RecruiterProfile>) => void) | null;
+  pendingProfileResolve: ((profile: RecruiterProfile) => void) | null;
   /** Resolver for the in-flight job scrape promise. */
-  pendingJobResolve: ((job: unknown) => void) | null;
+  pendingJobResolve: ((job: JobDetails | null) => void) | null;
   /** Consecutive failures — drives the anti-detection circuit breaker. */
   consecutiveErrors: number;
   log: BulkLogEntry[];

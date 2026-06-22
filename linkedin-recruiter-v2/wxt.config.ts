@@ -26,7 +26,7 @@ export default defineConfig({
     ],
     web_accessible_resources: [
       {
-        resources: ['lib/xlsx.full.min.js'],
+        resources: ['lib/xlsx.full.min.js', 'job-scraper.js'],
         matches: ['https://*.linkedin.com/*'],
       },
     ],

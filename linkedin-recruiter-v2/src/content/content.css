@@ -1,0 +1,73 @@
+/* LinkedIn Recruiter Intelligence — Floating Action Button */
+
+.lri-fab {
+    position: fixed !important;
+    bottom: 24px !important;
+    right: 24px !important;
+    z-index: 999999 !important;
+
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+
+    padding: 14px 22px !important;
+    background: linear-gradient(135deg, #0a66c2 0%, #0077b5 100%) !important;
+    color: white !important;
+    border-radius: 28px !important;
+    box-shadow: 0 4px 16px rgba(10, 102, 194, 0.35), 0 2px 6px rgba(0, 0, 0, 0.1) !important;
+
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+
+    cursor: pointer !important;
+    user-select: none !important;
+    transition: transform 0.2s, box-shadow 0.2s !important;
+}
+
+.lri-fab:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(10, 102, 194, 0.45), 0 3px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.lri-fab:active {
+    transform: translateY(0) !important;
+}
+
+.lri-fab-icon {
+    font-size: 18px !important;
+    line-height: 1 !important;
+}
+
+.lri-fab-text {
+    line-height: 1 !important;
+    white-space: nowrap !important;
+}
+
+/* Loading state */
+.lri-fab.lri-loading {
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%) !important;
+    cursor: wait !important;
+    pointer-events: none !important;
+}
+
+.lri-fab.lri-loading .lri-fab-icon {
+    animation: lri-spin 1s linear infinite !important;
+}
+
+@keyframes lri-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Success state */
+.lri-fab.lri-success {
+    background: linear-gradient(135deg, #198754 0%, #146c43 100%) !important;
+    box-shadow: 0 4px 16px rgba(25, 135, 84, 0.35) !important;
+}
+
+/* Error state */
+.lri-fab.lri-error {
+    background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%) !important;
+    box-shadow: 0 4px 16px rgba(220, 53, 69, 0.35) !important;
+}
