@@ -249,7 +249,7 @@ Content scripts fully typed. Old `content.js` monolith retired.
 
 ---
 
-## Milestone 5 — Popup UI with React (Days 8–9)
+## Milestone 5 — Popup UI with React ✅ COMPLETE (Days 8–9)
 
 **Goal:** Replace 34KB `popup.js` spaghetti with React components.
 
@@ -278,22 +278,37 @@ src/entrypoints/popup/
 ### Tasks
 
 **Day 8 — Shell + data hooks**
-- [ ] Set up React entry point in WXT popup
-- [ ] `useProfiles.ts` hook — loads profiles, handles delete, auto-refreshes
-- [ ] `useBulkState.ts` hook — polls bulk progress, listens for `bulkProgress` messages
-- [ ] `useN8nSettings.ts` hook — reads/writes n8n settings
-- [ ] `StatusPill.tsx` — header status indicator (ON/OFF/Scraping)
+- [x] React entry point (`main.tsx` imports `popup.css`, `App.tsx` shell)
+- [x] `useProfiles.ts` — loads via `getProfiles`, delete + clearAll, reloads
+- [x] `useBulkState.ts` — seeds from `getBulkState`, listens for `bulkProgress`, polls every 2s
+- [x] `useSettings.ts` — n8n owner/autoPull + AI settings via the M2 settings layer
+- [x] `StatusPill.tsx` — header indicator (Idle / 🤖 Auto-pull ON / Scraping x/y)
 
 **Day 9 — UI tabs**
-- [ ] `ProfilesTab.tsx` — profile cards list, delete button, count badge
-- [ ] `ScrapeTab.tsx` — Team ID input, Pull URLs, delay slider, Start/Stop bulk
-- [ ] `ExportTab.tsx` — Export JSON, Export XLSX, Send to n8n buttons
-- [ ] `BulkProgressBar.tsx` — live progress with log feed
-- [ ] Port `popup.css` → CSS modules or Tailwind (optional)
-- [ ] Test all tab interactions
+- [x] `ProfilesTab.tsx` + `ProfileCard.tsx` — search, cards, hiring jobs, open/copy/delete, empty state
+- [x] `N8nTab.tsx` — Team ID, Auto Mode banner+toggle, Test, delay/enrich, Pull, Start/Stop, queue, bulk progress, AI section, activity log, Send/Clear
+- [x] `LiveStatusBar.tsx` — across-tabs amber scraping bar + STOP
+- [x] Reused `popup.css` verbatim (imported in `main.tsx`) for pixel parity
+- [ ] Manual interaction test in Chrome — deferred to M7 QA (needs loaded extension)
 
-### Deliverable
+### Deliverable ✅
 Full popup rebuilt in React. Visual appearance identical to v0.19.0.
+
+**Notes**
+- The real v0.19.0 popup has **2 tabs (Saved | n8n)**, not the 3-tab Profiles/Scrape/Export
+  the roadmap sketched. Matched the real UI; there is no separate Export tab — CSV
+  builders live in `lib/csv.ts` and feed the n8n tab's "Send Saved Profiles Now".
+- Component split: `components/` (StatusPill, LiveStatusBar, ProfilesTab, ProfileCard,
+  N8nTab), `hooks/` (useProfiles, useBulkState, useSettings), `lib/` (messaging, csv,
+  popupN8n). `csv.ts` reuses `pickTopJob` from `background/exporter` (no duplication;
+  xlsx stays tree-shaken out of the popup bundle).
+- Popup consumes `ScrapedProfile` (the stored superset) so it can read
+  `location`/`profilePic`/`hasHiringBadge`/`applicantsCount`.
+- Trimmed a pre-existing malformed trailing rule in the source `popup.css`
+  (`.info-banner` was cut off mid-`linear-gradient` in v0.19.0 — browser ignored it,
+  esbuild warned). The full `.info-banner` is still defined earlier; it's unused anyway.
+- Verified: `npm run type-check` exit 0, `npm run build` exit 0.
+  Outputs: popup chunk 176 KB, `popup.css` 12.3 KB, no xlsx chunk.
 
 ---
 
