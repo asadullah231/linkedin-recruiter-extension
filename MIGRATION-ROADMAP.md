@@ -249,7 +249,7 @@ Content scripts fully typed. Old `content.js` monolith retired.
 
 ---
 
-## Milestone 5 — Popup UI with React (Days 8–9)
+## Milestone 5 — Popup UI with React ✅ COMPLETE (Days 8–9)
 
 **Goal:** Replace 34KB `popup.js` spaghetti with React components.
 
@@ -278,31 +278,46 @@ src/entrypoints/popup/
 ### Tasks
 
 **Day 8 — Shell + data hooks**
-- [ ] Set up React entry point in WXT popup
-- [ ] `useProfiles.ts` hook — loads profiles, handles delete, auto-refreshes
-- [ ] `useBulkState.ts` hook — polls bulk progress, listens for `bulkProgress` messages
-- [ ] `useN8nSettings.ts` hook — reads/writes n8n settings
-- [ ] `StatusPill.tsx` — header status indicator (ON/OFF/Scraping)
+- [x] React entry point (`main.tsx` imports `popup.css`, `App.tsx` shell)
+- [x] `useProfiles.ts` — loads via `getProfiles`, delete + clearAll, reloads
+- [x] `useBulkState.ts` — seeds from `getBulkState`, listens for `bulkProgress`, polls every 2s
+- [x] `useSettings.ts` — n8n owner/autoPull + AI settings via the M2 settings layer
+- [x] `StatusPill.tsx` — header indicator (Idle / 🤖 Auto-pull ON / Scraping x/y)
 
 **Day 9 — UI tabs**
-- [ ] `ProfilesTab.tsx` — profile cards list, delete button, count badge
-- [ ] `ScrapeTab.tsx` — Team ID input, Pull URLs, delay slider, Start/Stop bulk
-- [ ] `ExportTab.tsx` — Export JSON, Export XLSX, Send to n8n buttons
-- [ ] `BulkProgressBar.tsx` — live progress with log feed
-- [ ] Port `popup.css` → CSS modules or Tailwind (optional)
-- [ ] Test all tab interactions
+- [x] `ProfilesTab.tsx` + `ProfileCard.tsx` — search, cards, hiring jobs, open/copy/delete, empty state
+- [x] `N8nTab.tsx` — Team ID, Auto Mode banner+toggle, Test, delay/enrich, Pull, Start/Stop, queue, bulk progress, AI section, activity log, Send/Clear
+- [x] `LiveStatusBar.tsx` — across-tabs amber scraping bar + STOP
+- [x] Reused `popup.css` verbatim (imported in `main.tsx`) for pixel parity
+- [ ] Manual interaction test in Chrome — deferred to M7 QA (needs loaded extension)
 
-### Deliverable
+### Deliverable ✅
 Full popup rebuilt in React. Visual appearance identical to v0.19.0.
+
+**Notes**
+- The real v0.19.0 popup has **2 tabs (Saved | n8n)**, not the 3-tab Profiles/Scrape/Export
+  the roadmap sketched. Matched the real UI; there is no separate Export tab — CSV
+  builders live in `lib/csv.ts` and feed the n8n tab's "Send Saved Profiles Now".
+- Component split: `components/` (StatusPill, LiveStatusBar, ProfilesTab, ProfileCard,
+  N8nTab), `hooks/` (useProfiles, useBulkState, useSettings), `lib/` (messaging, csv,
+  popupN8n). `csv.ts` reuses `pickTopJob` from `background/exporter` (no duplication;
+  xlsx stays tree-shaken out of the popup bundle).
+- Popup consumes `ScrapedProfile` (the stored superset) so it can read
+  `location`/`profilePic`/`hasHiringBadge`/`applicantsCount`.
+- Trimmed a pre-existing malformed trailing rule in the source `popup.css`
+  (`.info-banner` was cut off mid-`linear-gradient` in v0.19.0 — browser ignored it,
+  esbuild warned). The full `.info-banner` is still defined earlier; it's unused anyway.
+- Verified: `npm run type-check` exit 0, `npm run build` exit 0.
+  Outputs: popup chunk 176 KB, `popup.css` 12.3 KB, no xlsx chunk.
 
 ---
 
-## Milestone 6 — Anti-Detection Hardening (Day 10)
+## Milestone 6 — Anti-Detection Hardening ✅ COMPLETE (Day 10)
 
 **Goal:** Consolidate all LinkedIn anti-blocking logic into one typed module.
 
 ### Tasks
-- [ ] Create `src/background/anti-detect.ts`:
+- [x] Create `src/background/anti-detect.ts`:
   ```ts
   export interface AntiDetectConfig {
     minDelayMs: number;       // 10000 (10s)
@@ -310,17 +325,39 @@ Full popup rebuilt in React. Visual appearance identical to v0.19.0.
     cooldownAfterErrors: number;  // 3 errors → 45-75s pause
     hardStopAfterErrors: number;  // 5 errors → 3-4 min pause
     emptyProfileDelayMs: [number, number]; // [2000, 3500]
+    sessionLimit: number;          // 150
+    sessionWindowMs: number;       // 4h
   }
 
-  export function computeDelay(hadJobs: boolean, config: AntiDetectConfig): number { ... }
-  export async function maybeCircuitBreak(consecutiveErrors: number, config: AntiDetectConfig): Promise<void> { ... }
+  export function computeDelay(hadJobs: boolean, baseDelayMs: number, config?: AntiDetectConfig): number { ... }
+  export async function maybeCircuitBreak(consecutiveErrors: number, config?: AntiDetectConfig): Promise<boolean> { ... }
   ```
-- [ ] Move circuit breaker from `bulk.ts` into `anti-detect.ts`
-- [ ] Add per-session rate limit: max 150 profiles per 4-hour window
-- [ ] Add `SessionGuard` — stops auto-pull if limit hit, logs warning
+- [x] Move circuit breaker from `bulk.ts` into `anti-detect.ts`
+- [x] Add per-session rate limit: max 150 profiles per 4-hour window
+- [x] Add `sessionGuard` — stops auto-pull if limit hit, logs warning
 
-### Deliverable
+### Deliverable ✅
 All anti-blocking logic in one auditable, typed file. Easy to tune without touching bulk logic.
+
+**Notes**
+- `anti-detect.ts` exports `AntiDetectConfig` + `DEFAULT_ANTI_DETECT_CONFIG`, the
+  pure `computeDelay()` and `maybeCircuitBreak()` helpers, and the `sessionGuard`
+  object (`record` / `usage` / `hasCapacity` / `enforce` / `reset`).
+- `bulk.ts` no longer inlines timing: the circuit-breaker block became
+  `if (await maybeCircuitBreak(bulkState.consecutiveErrors)) bulkState.consecutiveErrors = 0;`
+  and the smart-delay block became `computeDelay(hadJobs, bulkState.delay * 1000)`.
+  Behaviour-faithful, with one deliberate hardening: the user's base delay is now
+  **floored at `minDelayMs` (10s)** on the heavy path — nobody can dial the gap
+  below the safe minimum. `maybeCircuitBreak` returns a boolean (caller resets the
+  counter) so the module stays decoupled from `bulkState`.
+- `sessionGuard` persists scrape timestamps in `local:antiDetectScrapeLog` so the
+  150-per-4h rolling cap survives service-worker restarts. `enforce()` is called
+  (1) per-iteration in `runBulkQueue` (stops the batch cleanly when the cap is hit)
+  and (2) in the auto-pull alarm in `background.ts` (won't start a new batch); on
+  cap it clears the `auto-pull` alarm, persists `autoPull:false`, and updates the
+  badge. `record()` is called once per profile view inside the loop.
+- Verified: `npm run type-check` exit 0, `npm run build` exit 0.
+  `background.js` 28.7 KB → **30.21 KB** (anti-detect logic added). Total 260 KB.
 
 ---
 
