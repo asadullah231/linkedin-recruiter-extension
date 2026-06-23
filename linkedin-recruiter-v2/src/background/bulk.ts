@@ -6,7 +6,8 @@
  * profile, (optionally) enrich jobs, stream the result to n8n, then
  * post-process (closed-job filter + AI ranking) at the end.
  *
- * The circuit breaker lives here for now; it moves to anti-detect.ts in M6.
+ * Anti-detection (pacing, circuit breaker, session cap) lives in anti-detect.ts;
+ * this file just calls into it.
  */
 
 import { bulkState, resetBulkState } from './state';
@@ -14,6 +15,7 @@ import { bulkLog, shortUrl, sleep, updateBadge } from './utils';
 import { scrapeProfileInTab, scrapeJobInTab } from './scraper';
 import { streamProfileToN8n } from './n8n';
 import { filterClosedJobs, rankTopJobsWithAI } from './ai';
+import { computeDelay, maybeCircuitBreak, sessionGuard } from './anti-detect';
 import { saveProfile, deleteProfile } from '../utils/storage';
 import { getAiSettings, getN8nSettings, updateN8nSettings } from '../utils/settings';
 import type { StartBulkOptions } from '../types/messages';
@@ -58,9 +60,18 @@ export async function runBulkQueue(): Promise<void> {
       break;
     }
 
+    // ── SESSION GUARD: stop cleanly if we've hit the per-window profile cap ──
+    if (!(await sessionGuard.enforce())) {
+      bulkLog(`⏹ Session cap reached — stopping at ${i}/${bulkState.queue.length}`, 'error');
+      bulkState.isRunning = false;
+      break;
+    }
+
     bulkState.currentIndex = i;
     const url = bulkState.queue[i];
     bulkLog(`[${i + 1}/${bulkState.queue.length}] ${shortUrl(url)}`, 'info');
+    // Count this profile view against the rolling session window.
+    await sessionGuard.record();
 
     let hadJobs = false;
     try {
@@ -127,28 +138,16 @@ export async function runBulkQueue(): Promise<void> {
       bulkState.consecutiveErrors++;
     }
 
-    // ── CIRCUIT BREAKER: LinkedIn rate-limit / block detection ──
-    if (bulkState.consecutiveErrors >= 5) {
-      const coolMs = 3 * 60 * 1000 + Math.random() * 60 * 1000; // 3-4 min
-      bulkLog(
-        `🚨 5 consecutive errors — cooling ${Math.round(coolMs / 1000)}s to avoid LinkedIn block`,
-        'error',
-      );
-      await sleep(coolMs);
+    // ── CIRCUIT BREAKER: LinkedIn rate-limit / block detection (see anti-detect.ts) ──
+    if (await maybeCircuitBreak(bulkState.consecutiveErrors)) {
       bulkState.consecutiveErrors = 0;
-    } else if (bulkState.consecutiveErrors >= 3) {
-      const coolMs = 45 * 1000 + Math.random() * 30 * 1000; // 45-75s
-      bulkLog(`⚠️ 3 consecutive errors — pausing ${Math.round(coolMs / 1000)}s`, 'error');
-      await sleep(coolMs);
     }
 
-    // ── SMART DELAY ──
-    // Only wait the full delay if the profile had jobs (= same heavy work next).
+    // ── SMART DELAY (see anti-detect.ts) ──
+    // Heavy path (had jobs) honours the user's base delay floored at the safe
+    // minimum; light path (empty profile) gets a short random pause.
     if (i < bulkState.queue.length - 1 && bulkState.isRunning) {
-      const jitter = Math.random() * 5000; // 0-5s random extra
-      const wait = hadJobs
-        ? bulkState.delay * 1000 + jitter
-        : 2000 + Math.random() * 1500; // 2-3.5s for empty profiles
+      const wait = computeDelay(hadJobs, bulkState.delay * 1000);
       if (hadJobs) {
         bulkLog(`  ⏱ Waiting ${Math.round(wait / 1000)}s...`, 'info');
       }
