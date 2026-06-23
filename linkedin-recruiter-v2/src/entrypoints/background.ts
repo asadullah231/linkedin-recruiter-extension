@@ -12,6 +12,7 @@ import { bulkState } from '../background/state';
 import { bulkLog, updateBadge, extractUrls } from '../background/utils';
 import { saveProfile, getAllProfiles, deleteProfile, profileStore } from '../utils/storage';
 import { startBulkScrape } from '../background/bulk';
+import { sessionGuard } from '../background/anti-detect';
 import {
   getN8nSettings,
   updateN8nSettings,
@@ -131,6 +132,13 @@ export default defineBackground(() => {
       if (!n8nSettings.autoPull) return;
       if (!n8nSettings.owner) {
         console.warn('🤖 Auto-pull skipped: Team ID (owner) not set');
+        return;
+      }
+
+      // ── SESSION GUARD: don't start a new batch if the rolling cap is hit ──
+      // (enforce() disarms auto-pull + logs a warning when it returns false.)
+      if (!(await sessionGuard.enforce())) {
+        console.warn('🤖 Auto-pull halted: session profile cap reached');
         return;
       }
 

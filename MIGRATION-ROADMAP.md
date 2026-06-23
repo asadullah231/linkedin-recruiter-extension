@@ -312,12 +312,12 @@ Full popup rebuilt in React. Visual appearance identical to v0.19.0.
 
 ---
 
-## Milestone 6 — Anti-Detection Hardening (Day 10)
+## Milestone 6 — Anti-Detection Hardening ✅ COMPLETE (Day 10)
 
 **Goal:** Consolidate all LinkedIn anti-blocking logic into one typed module.
 
 ### Tasks
-- [ ] Create `src/background/anti-detect.ts`:
+- [x] Create `src/background/anti-detect.ts`:
   ```ts
   export interface AntiDetectConfig {
     minDelayMs: number;       // 10000 (10s)
@@ -325,17 +325,39 @@ Full popup rebuilt in React. Visual appearance identical to v0.19.0.
     cooldownAfterErrors: number;  // 3 errors → 45-75s pause
     hardStopAfterErrors: number;  // 5 errors → 3-4 min pause
     emptyProfileDelayMs: [number, number]; // [2000, 3500]
+    sessionLimit: number;          // 150
+    sessionWindowMs: number;       // 4h
   }
 
-  export function computeDelay(hadJobs: boolean, config: AntiDetectConfig): number { ... }
-  export async function maybeCircuitBreak(consecutiveErrors: number, config: AntiDetectConfig): Promise<void> { ... }
+  export function computeDelay(hadJobs: boolean, baseDelayMs: number, config?: AntiDetectConfig): number { ... }
+  export async function maybeCircuitBreak(consecutiveErrors: number, config?: AntiDetectConfig): Promise<boolean> { ... }
   ```
-- [ ] Move circuit breaker from `bulk.ts` into `anti-detect.ts`
-- [ ] Add per-session rate limit: max 150 profiles per 4-hour window
-- [ ] Add `SessionGuard` — stops auto-pull if limit hit, logs warning
+- [x] Move circuit breaker from `bulk.ts` into `anti-detect.ts`
+- [x] Add per-session rate limit: max 150 profiles per 4-hour window
+- [x] Add `sessionGuard` — stops auto-pull if limit hit, logs warning
 
-### Deliverable
+### Deliverable ✅
 All anti-blocking logic in one auditable, typed file. Easy to tune without touching bulk logic.
+
+**Notes**
+- `anti-detect.ts` exports `AntiDetectConfig` + `DEFAULT_ANTI_DETECT_CONFIG`, the
+  pure `computeDelay()` and `maybeCircuitBreak()` helpers, and the `sessionGuard`
+  object (`record` / `usage` / `hasCapacity` / `enforce` / `reset`).
+- `bulk.ts` no longer inlines timing: the circuit-breaker block became
+  `if (await maybeCircuitBreak(bulkState.consecutiveErrors)) bulkState.consecutiveErrors = 0;`
+  and the smart-delay block became `computeDelay(hadJobs, bulkState.delay * 1000)`.
+  Behaviour-faithful, with one deliberate hardening: the user's base delay is now
+  **floored at `minDelayMs` (10s)** on the heavy path — nobody can dial the gap
+  below the safe minimum. `maybeCircuitBreak` returns a boolean (caller resets the
+  counter) so the module stays decoupled from `bulkState`.
+- `sessionGuard` persists scrape timestamps in `local:antiDetectScrapeLog` so the
+  150-per-4h rolling cap survives service-worker restarts. `enforce()` is called
+  (1) per-iteration in `runBulkQueue` (stops the batch cleanly when the cap is hit)
+  and (2) in the auto-pull alarm in `background.ts` (won't start a new batch); on
+  cap it clears the `auto-pull` alarm, persists `autoPull:false`, and updates the
+  badge. `record()` is called once per profile view inside the loop.
+- Verified: `npm run type-check` exit 0, `npm run build` exit 0.
+  `background.js` 28.7 KB → **30.21 KB** (anti-detect logic added). Total 260 KB.
 
 ---
 
