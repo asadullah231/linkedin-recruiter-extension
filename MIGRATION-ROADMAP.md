@@ -361,14 +361,14 @@ All anti-blocking logic in one auditable, typed file. Easy to tune without touch
 
 ---
 
-## Milestone 7 — QA, Build & Release (Days 11–12)
+## Milestone 7 — QA, Build & Release ✅ BUILD/RELEASE DONE · ⏳ MANUAL QA PENDING (Days 11–12)
 
-**Goal:** Extension loads in Chrome from `dist/`, all features work end-to-end.
+**Goal:** Extension loads in Chrome from the build output, all features work end-to-end.
 
 ### Tasks
 
-**QA Checklist**
-- [ ] Load unpacked from `dist/` in Chrome
+**QA Checklist** — _requires a logged-in Chrome with the extension loaded; deferred to Asad / a manual session (cannot run headless)._
+- [ ] Load unpacked from `.output/chrome-mv3/` in Chrome
 - [ ] Manual save on 10 LinkedIn profiles → data correct
 - [ ] Bulk scrape 20 URLs → all results pushed to NocoDB
 - [ ] Auto-pull ON/OFF toggle → alarms fire correctly
@@ -381,18 +381,42 @@ All anti-blocking logic in one auditable, typed file. Easy to tune without touch
 - [ ] Multi-tenant → different Team IDs get separate results
 
 **Build**
-- [ ] `wxt build` → clean `dist/`
-- [ ] `wxt zip` → produces `.zip` for distribution
-- [ ] Bundle size audit: `dist/` should be < 200KB (excluding `lib/xlsx.full.min.js`)
-- [ ] Confirm XLSX lazy loads on first export, not on SW start
+- [x] `wxt build` → clean output in `linkedin-recruiter-v2/.output/chrome-mv3/`
+- [x] `wxt zip` → `linkedin-recruiter-intelligence-0.20.0-chrome.zip` (423 KB, incl. xlsx)
+- [x] Bundle size audit — see note (⚠️ 256 KB excl. xlsx, over the 200 KB target — React runtime)
+- [x] Confirm XLSX handling — see note (npm `xlsx` tree-shaken; `lib/xlsx.full.min.js` ships as a WAR)
 
 **Release**
-- [ ] Bump version in `wxt.config.ts` to `0.20.0`
-- [ ] Update `README.md` — new install instructions
-- [ ] Tag git release: `v0.20.0-wxt`
+- [x] Version is `0.20.0` in `wxt.config.ts` + `package.json` (already bumped)
+- [x] Update `README.md` — new WXT build/install instructions
+- [ ] Tag git release `v0.20.0-wxt` — **deferred until M5–M7 PRs merge to `main`** (don't tag a feature branch)
 
-### Deliverable
-Production-ready `v0.20.0` zip file.
+### Deliverable ✅ (build) / ⏳ (sign-off)
+Production-ready `v0.20.0` zip builds cleanly. Final sign-off waits on the manual QA pass + merge-then-tag.
+
+**Notes**
+- 🐛 **Build fix (release blocker, pre-existing since M0):** the static assets in the
+  project-root `public/` (`icons/`, `lib/xlsx.full.min.js`) were **never copied into
+  the build** — WXT's `publicDir` defaults to `<srcDir>/public` (= `src/public`).
+  Earlier milestone builds silently shipped with no icons and a dangling
+  `web_accessible_resources` reference to a missing `lib/xlsx.full.min.js`. Fixed in
+  `wxt.config.ts` with `publicDir: '../public'`. Also added an explicit `icons`
+  manifest key (`icons/icon{16,48,128}.png`) — the `icons/iconNN.png` naming didn't
+  match WXT's icon auto-discovery, so the manifest had no `icons` at all.
+  After the fix the output includes all three icons + the xlsx lib, and the manifest
+  carries the `icons` key.
+- **Bundle size:** dist is **~256 KB excluding `lib/xlsx.full.min.js`** — over the
+  200 KB target. The 176 KB React popup chunk is the cause (an accepted M5 tradeoff,
+  not a regression). The page-injected `lib/xlsx.full.min.js` (930 KB) is loaded only
+  as a web-accessible resource, never on SW start.
+- **XLSX lazy-load:** the npm `xlsx` package (`await import('xlsx')` in
+  `exporter.ts → buildXlsxBlob`) is currently **tree-shaken out** — no popup path
+  reaches it (the n8n tab exports CSV via `csv.ts`, not XLSX). So there is no xlsx
+  Vite chunk in the build, and nothing loads xlsx on SW start. The dynamic-import
+  architecture is correct; the chunk will materialise once an XLSX export button is
+  wired (post-migration). The separate `lib/xlsx.full.min.js` WAR is the legacy
+  page-injected lib, unrelated to the npm package.
+- Verified: `npm run type-check` exit 0, `npm run build` exit 0, `npm run zip` exit 0.
 
 ---
 

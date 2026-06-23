@@ -1,8 +1,10 @@
-# 🎯 LinkedIn Recruiter Intelligence — v0.19.0
+# 🎯 LinkedIn Recruiter Intelligence — v0.20.0 (WXT)
 
 n8n-driven, **multi-tenant** LinkedIn recruiter scraper. Each teammate sets a **Team ID (owner)**; the extension auto-pulls only *their* queued profiles from n8n, scrapes profiles + active hiring posts, and posts owner-tagged results back automatically — so 5–50 teammates can work at once without their data ever mixing.
 
-## ✨ Features (v0.19.0)
+> **v0.20.0** is a full rewrite on **WXT + TypeScript + React** (source in [`linkedin-recruiter-v2/`](linkedin-recruiter-v2/)). Behaviour is identical to v0.19.0; the codebase is now typed, modular, and HMR-friendly. The old vanilla-JS build is preserved at the repo root for reference. See [`MIGRATION-ROADMAP.md`](MIGRATION-ROADMAP.md).
+
+## ✨ Features (v0.20.0)
 
 - ✅ 👥 **Multi-tenant** — set a Team ID (owner); each teammate pulls only their own URLs and results are tagged per owner
 - ✅ **Floating "Save Profile" button** on every LinkedIn profile page
@@ -46,27 +48,34 @@ Open the **🔗 n8n** tab in the popup:
 }
 ```
 
-## 🚀 Installation (5 minutes)
+## 🚀 Installation
 
-### Step 1: Open Chrome Extensions Page
+### Option A — Build from source (recommended)
 
-1. Open Chrome
-2. Type in URL bar: `chrome://extensions/`
-3. Press Enter
+The v0.20.0 extension is built with WXT. You build it once, then load the output folder.
 
-### Step 2: Enable Developer Mode
+```bash
+cd linkedin-recruiter-v2
+npm install          # first time only
+npm run build        # produces .output/chrome-mv3/
+# or: npm run zip    # produces .output/linkedin-recruiter-intelligence-0.20.0-chrome.zip
+```
 
-- Top right corner pe **"Developer mode"** toggle ON karo
+1. Open Chrome → `chrome://extensions/`
+2. Toggle **Developer mode** ON (top-right)
+3. Click **Load unpacked** (top-left)
+4. Select the build output: `linkedin-recruiter-v2/.output/chrome-mv3/`
 
-### Step 3: Load the Extension
+> During development, `npm run dev` launches Chrome with the extension auto-loaded and hot-reloads on every save — no manual reload needed.
 
-1. Click **"Load unpacked"** button (top left)
-2. Browse to: `C:\Users\User\Downloads\linkedin-recruiter-extension`
-3. Click **"Select Folder"**
+### Option B — Load the prebuilt zip
 
-### Step 4: Pin the Extension (Optional but recommended)
+1. Unzip `linkedin-recruiter-intelligence-0.20.0-chrome.zip`
+2. Load the unzipped folder via **Load unpacked** (steps 1–4 above)
 
-1. Click the puzzle piece icon (top right of Chrome)
+### Pin the Extension (optional but recommended)
+
+1. Click the puzzle-piece icon (top-right of Chrome)
 2. Find **"LinkedIn Recruiter Intelligence"**
 3. Click the pin icon to keep it visible
 
@@ -229,4 +238,4 @@ If something breaks, check:
 
 ---
 
-**LinkedIn Recruiter Intelligence v0.19.0 · 👥 Multi-tenant · ⚡ Speed Optimized**
+**LinkedIn Recruiter Intelligence v0.20.0 (WXT · TypeScript · React) · 👥 Multi-tenant · ⚡ Speed Optimized**
